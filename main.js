@@ -7,6 +7,7 @@
 // The adapter-core module gives you access to the core ioBroker functions
 // you need to create an adapter
 const utils = require("@iobroker/adapter-core");
+const request = require('request');
 
 // Load your modules here, e.g.:
 // const fs = require("fs");
@@ -26,8 +27,12 @@ class HyperionNgRemote extends utils.Adapter {
         // this.on("objectChange", this.onObjectChange.bind(this));
         // this.on("message", this.onMessage.bind(this));
         this.on("unload", this.onUnload.bind(this));
+        
+        this.sysinfoFinished = false;
+        this.serverinfoFinished = false;
     }
-
+    
+    
     /**
      * Is called when databases are connected and adapter received configuration.
      */
@@ -86,6 +91,16 @@ class HyperionNgRemote extends utils.Adapter {
 
         result = await this.checkGroupAsync("admin", "admin");
         this.log.info("check group user admin group admin: " + result);
+        
+        this.connectToHyperion();
+        
+        
+        this.conn = new HyperionApi("192.168.0.83", "8090", this.NotifyCallback.bind(this), this.log.info);        
+        this.log.info( this.conn.GetJsonAddress() );
+        this.conn.ServerInfo();
+        this.conn.SysInfo();
+        this.log.info("sended both requests");
+        
     }
 
     /**
@@ -138,23 +153,46 @@ class HyperionNgRemote extends utils.Adapter {
         }
     }
 
-    // If you need to accept messages in your adapter, uncomment the following block and the corresponding line in the constructor.
-    // /**
-    //  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-    //  * Using this method requires "common.message" property to be set to true in io-package.json
-    //  * @param {ioBroker.Message} obj
-    //  */
-    // onMessage(obj) {
-    //     if (typeof obj === "object" && obj.message) {
-    //         if (obj.command === "send") {
-    //             // e.g. send email or pushover or whatever
-    //             this.log.info("send command");
+    connectToHyperion()
+    {
+        var self = this;
+        //self.log.info("connecting in 10s");
+        //setTimeout( function() { self.log.info("connected"); self.setState("info.connection", true, true); }, 10000);
+    }
+    
+    
+    NotifyCallback(response)
+    {
+        this.log.info("testtesttest");
+        
+        if (response)
+        {
+            this.log.info("Debug: " + response.command);
+            
+            if (response.command == "serverinfo")
+            {
+                this.serverinfoFinished = true;
+            }
+            else if (response.command == "serverinfo")
+            {
+                this.sysinfoFinished = true;
+            }
+            
+            this.log.info(sysinfoFinished + " === " + serverinfoFinished);
+            
+            
+            if  ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) )
+            {
+                this.log.info("connected");
+                this.setState("info.connection", true, true);
+            }
+        }
+        else
+        {
+            this.log.info("no response");
+        }
+    }
 
-    //             // Send response in callback if required
-    //             if (obj.callback) this.sendTo(obj.from, obj.command, "Message received", obj.callback);
-    //         }
-    //     }
-    // }
 
 }
 
@@ -169,3 +207,88 @@ if (module.parent) {
     // otherwise start the instance directly
     new HyperionNgRemote();
 }
+
+
+class HyperionApi
+{    
+    constructor(ip, port, notifyClbk, logger)
+    {
+        logger("test");
+        this.callback = notifyClbk;
+        this.logger = logger;
+        this.jsonAddress = "http://" + ip + ":" + port + "/json-rpc";        
+    }
+    
+    GetJsonAddress()
+    {
+        return this.jsonAddress;
+    }
+    
+    ServerInfo()
+    {
+        var json =
+        {
+            "command": "serverinfo",
+            "tan": 1
+        };
+        this.RequestCommand(json);
+    }
+        
+    SysInfo()
+    {
+        var json =
+        {
+            "command": "sysinfo",
+            "tan": 1
+        };
+        this.RequestCommand(json);
+    }
+        
+    
+    RequestCommand(jsonObj)
+    {
+        var ret = null;
+        /* create object containing all the needed options for our request */
+        var jsonString = JSON.stringify(jsonObj);
+        var options =
+        {
+            url: this.jsonAddress,
+            method: 'POST',
+            body: jsonString,
+            headers:
+            {
+                'Content-Type': 'application/json',
+                'Content-Length': jsonString.length
+            }
+        };
+
+        /* now call API function for making the request */
+        var self = this;
+        request.post(options, function(error, response, body)
+        {        
+            if (error)
+            {
+                self.logger("error during request")
+            }
+            else
+            {
+                var json = JSON.parse(body);
+                if (json.success == false)
+                {
+                    self.logger( json.error );
+                }
+                else
+                {
+                    self.logger("request OK: " + json.command);
+                    ret = json;
+                }
+            }
+            
+            self.logger("calling clbk: " + self.callback);
+            self.callback(ret);
+        } );      
+        
+    }
+    
+}
+
