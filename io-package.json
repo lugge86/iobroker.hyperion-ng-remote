@@ -1,0 +1,118 @@
+{
+    "common": {
+        "name": "hyperion-ng-remote",
+        "version": "0.0.1",
+        "news": {
+            "0.0.1": {
+                "en": "initial release",
+                "de": "Erstveröffentlichung",
+                "ru": "Начальная версия",
+                "pt": "lançamento inicial",
+                "nl": "Eerste uitgave",
+                "fr": "Première version",
+                "it": "Versione iniziale",
+                "es": "Versión inicial",
+                "pl": "Pierwsze wydanie",
+                "zh-cn": "首次出版"
+            }
+        },
+        "title": "Remote for hyperion.ng",
+        "titleLang": {
+            "en": "Remote for hyperion.ng",
+            "de": "Fernbedienung für hyperion.ng",
+            "ru": "Пульт для hyperion.ng",
+            "pt": "Remoto para hyperion.ng",
+            "nl": "Remote voor hyperion.ng",
+            "fr": "Télécommande pour hyperion.ng",
+            "it": "Telecomando per hyperion.ng",
+            "es": "Remoto para hyperion.ng",
+            "pl": "Pilot do hyperion.ng",
+            "zh-cn": "hyperion.ng的遥控器"
+        },
+        "desc": {
+            "en": "Remote for hyperion.ng",
+            "de": "Fernbedienung für hyperion.ng",
+            "ru": "Пульт для hyperion.ng",
+            "pt": "Remoto para hyperion.ng",
+            "nl": "Remote voor hyperion.ng",
+            "fr": "Télécommande pour hyperion.ng",
+            "it": "Telecomando per hyperion.ng",
+            "es": "Remoto para hyperion.ng",
+            "pl": "Pilot do hyperion.ng",
+            "zh-cn": "hyperion.ng的遥控器"
+        },
+        "authors": [
+            "lugge86 <lugge@lugge.lugge>"
+        ],
+        "keywords": [
+            "hyperion",
+            "hue",
+            "iobroker",
+            "ng",
+            "led"
+        ],
+        "license": "MIT",
+        "platform": "Javascript/Node.js",
+        "main": "main.js",
+        "icon": "hyperion-ng-remote.png",
+        "enabled": true,
+        "extIcon": "https://raw.githubusercontent.com/lugge86/ioBroker.hyperion-ng-remote/master/admin/hyperion-ng-remote.png",
+        "readme": "https://github.com/lugge86/ioBroker.hyperion-ng-remote/blob/master/README.md",
+        "loglevel": "info",
+        "mode": "daemon",
+        "type": "lighting",
+        "compact": true,
+        "materialize": true,
+        "materializeTab": true,
+        "adminTab": {
+            "singleton": true,
+            "name": {
+                "en": "Remote for hyperion.ng",
+                "de": "Fernbedienung für hyperion.ng",
+                "ru": "Пульт для hyperion.ng",
+                "pt": "Remoto para hyperion.ng",
+                "nl": "Remote voor hyperion.ng",
+                "fr": "Télécommande pour hyperion.ng",
+                "it": "Telecomando per hyperion.ng",
+                "es": "Remoto para hyperion.ng",
+                "pl": "Pilot do hyperion.ng",
+                "zh-cn": "hyperion.ng的遥控器"
+            },
+            "link": "",
+            "fa-icon": "info"
+        },
+        "dependencies": [
+            {
+                "js-controller": ">=1.4.2"
+            }
+        ]
+    },
+    "native": {
+        "option1": true,
+        "option2": "42"
+    },
+    "objects": [],
+    "instanceObjects": [
+        {
+            "_id": "info",
+            "type": "channel",
+            "common": {
+                "name": "Information"
+            },
+            "native": {}
+        },
+        {
+            "_id": "info.connection",
+            "type": "state",
+            "common": {
+                "role": "indicator.connected",
+                "name": "Device or service connected",
+                "type": "boolean",
+                "read": true,
+                "write": false,
+                "def": false
+            },
+            "native": {}
+        }
+    ]
+}
