@@ -216,55 +216,67 @@ class HyperionApi
         logger("test");
         this.callback = notifyClbk;
         this.logger = logger;
-        this.jsonAddress = "http://" + ip + ":" + port + "/json-rpc";        
+        this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";        
     }
     
     GetJsonAddress()
     {
-        return this.jsonAddress;
+        return this.jsonUrl;
     }
+    
+    
+    Api_SourceSelection(prio)
+    {
+        var requestJson =
+        {
+            "command": "sourceselect",
+            "priority": prio
+        };    
+        this.SendRequest(requestJson);
+}
+
     
     ServerInfo()
     {
-        var json =
+        var requestJson =
         {
             "command": "serverinfo",
             "tan": 1
         };
-        this.RequestCommand(json);
+        this.RequestCommand(requestJson);
     }
         
     SysInfo()
     {
-        var json =
+        var requestJson =
         {
             "command": "sysinfo",
             "tan": 1
         };
-        this.RequestCommand(json);
+        this.RequestCommand(requestJson);
     }
         
     
-    RequestCommand(jsonObj)
+    SendRequest(requestJson)
     {
         var ret = null;
         /* create object containing all the needed options for our request */
-        var jsonString = JSON.stringify(jsonObj);
-        var options =
+        var requestString = JSON.stringify(requestJson);
+        var requestOptions =
         {
-            url: this.jsonAddress,
+            url: this.jsonUrl,
             method: 'POST',
-            body: jsonString,
+            body: requestString,
             headers:
             {
                 'Content-Type': 'application/json',
-                'Content-Length': jsonString.length
+                'Content-Length': requestString.length
             }
         };
 
         /* now call API function for making the request */
         var self = this;
-        request.post(options, function(error, response, body)
+        request.post(requestOptions, function(error, response, body)
         {        
             if (error)
             {
