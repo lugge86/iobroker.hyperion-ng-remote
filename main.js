@@ -14,6 +14,10 @@ const request = require('request');
 
 class HyperionNgRemote extends utils.Adapter {
 
+    sysinfoFinished = false;
+    serverinfoFinished = false;
+    adapterConnected = false;
+
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
@@ -27,12 +31,9 @@ class HyperionNgRemote extends utils.Adapter {
         // this.on("objectChange", this.onObjectChange.bind(this));
         // this.on("message", this.onMessage.bind(this));
         this.on("unload", this.onUnload.bind(this));
-        
-        this.sysinfoFinished = false;
-        this.serverinfoFinished = false;
     }
-    
-    
+
+
     /**
      * Is called when databases are connected and adapter received configuration.
      */
@@ -90,21 +91,18 @@ class HyperionNgRemote extends utils.Adapter {
 
         //result = await this.checkGroupAsync("admin", "admin");
         //this.log.info("check group user admin group admin: " + result);
-        
-        
-        this.connectToHyperion();
-        
-        
-        this.conn = new HyperionApi("192.168.0.83", "8090", this.NotifyCallback.bind(this), this.log.info);        
+
+
+        this.conn = new HyperionApi("192.168.0.83", "8090", this.NotifyCallback.bind(this), this.log.info);
         //this.log.info( this.conn.GetJsonAddress() );
         this.conn.ServerInfo();
         this.conn.SysInfo();
         this.log.info("sended both requests");
-        
+
         this.conn.Color( [255,0,0], 200, 0)
         this.conn.Color( [0,255,0], 201, 0)
         this.conn.Color( [0,0,255], 202, 0)
-        
+
     }
 
     /**
@@ -150,7 +148,7 @@ class HyperionNgRemote extends utils.Adapter {
     onStateChange(id, state) {
         if (state) {
             this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-            
+
             switch(id){
                 case "hyperion-ng-remote.0.selectPrio": {
                     this.log.info("selectPrio");
@@ -161,80 +159,72 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
             }
-            
-        } else {            
+
+        } else {
             this.log.info(`state ${id} deleted`);
             //todo: throw error
         }
     }
 
-    connectToHyperion()
+
+    NotifyCallback(command, error)
     {
-        var self = this;
-        //self.log.info("connecting in 10s");
-        //setTimeout( function() { self.log.info("connected"); self.setState("info.connection", true, true); }, 10000);
-    }
-    
-    
-    NotifyCallback(response)
-    {
-        this.log.info("callback for: " + response.command);
-        
-        
-        if (response)
-        {
-                        
-            if (response.command == "serverinfo")
-            {
-                this.serverinfoFinished = true;
-                this.log.info("serverinfoFinished true");
+        this.log.info("callback for: " + command);
+
+        if (error) {
+            this.log.info("error with request: " + command);
+        } else {
+            switch(command) {
+                case "serverinfo": {
+                    this.serverinfoFinished = true;
+                    break;
+                }
+                case "sysinfo": {
+                    this.sysinfoFinished = true;
+                    break;
+                }
+                case "color": {
+                    break;
+                }
+                case "sourceselect": {
+                    break;
+                }
+                default: {
+                    break;
+                }
             }
-            else if (response.command == "sysinfo")
+
+            if ( (this.adapterConnected == false) && (this.sysinfoFinished == true) && (this.serverinfoFinished == true) )
             {
-                this.sysinfoFinished = true;
-                this.log.info("sysinfoFinished true");
-            }
-            
-            
-            this.log.info(this.sysinfoFinished + " === " + this.serverinfoFinished);
-            
-            
-            if  ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) )
-            {
-                this.log.info("connected");
+                this.log.info("adapterConnected");
+                this.adapterConnected = true
                 this.setState("info.connection", true, true);
             }
         }
-        else
-        {
-            this.log.info("no response");
-        }
-        
     }
-
-
 }
 
 
 class HyperionApi
-{    
+{
+    sysinfo = null;
+    serverinfo = null;
+
     constructor(ip, port, notifyClbk, logger) {
         logger("Creating new Connection with IP "+ ip);
         this.callback = notifyClbk;
         this.logger = logger;
-        this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";        
+        this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";
     }
-    
-    
+
     SourceSelection(prio) {
         var requestJson = {
             command: "sourceselect",
             priority: prio
-        };    
+        };
         this.SendRequest(requestJson);
     }
 
-    
     ServerInfo() {
         var requestJson = {
             command: "serverinfo",
@@ -242,7 +232,23 @@ class HyperionApi
         };
         this.SendRequest(requestJson);
     }
-        
+
+    ServerInfoClbk(data) {
+        //todo: store serverinfo data
+    }
+
+    GetServerInfoComponents() {
+        ret = null;
+
+        return ret;
+    }
+
+    GetServerInfoPriorities() {
+        ret = null;
+
+        return ret;
+    }
+
     SysInfo() {
         var requestJson = {
             command: "sysinfo",
@@ -250,7 +256,17 @@ class HyperionApi
         };
         this.SendRequest(requestJson);
     }
-        
+
+    SysInfoClbk(data) {
+        //todo: store sysinfo data
+    }
+
+    GetSysInfo() {
+        ret = null;
+
+        return ret;
+    }
+
     Color(color, prio, duration) {
         var requestJson = {
             command: "color",
@@ -262,10 +278,9 @@ class HyperionApi
         };
         this.SendRequest(requestJson);
     }
-        
+
     SendRequest(requestJson) {
-        var ret = null;
-        /* create object containing all the needed options for our request */
+        /* first, create object containing all the needed options for our request */
         var requestString = JSON.stringify(requestJson);
         var requestOptions = {
             url: this.jsonUrl,
@@ -277,31 +292,58 @@ class HyperionApi
             }
         };
 
-        /* now call API function for making the request */
+        /*
+         * Now make the actual request.
+         * The result will later be available in the request callback.
+         */
         var self = this;
-        
-        self.logger("sending request: " + requestJson);
-        
-        request.post(requestOptions, function(error, response, body) {        
-            if (error) {
-                self.logger("error during request")                
-            } else {
-                var json = JSON.parse(body);
-                if (json.success == false) {
-                    self.logger( json.error );
+        request.post(requestOptions,
+            function(error, response, body) {
+
+                var retError = null;
+                var retCommand = requestJson.command;
+
+                if (error) {
+                    /* this means request was not answered by hyperion */
+                    self.logger("request not executed: " + requestJson.command);
+                    self.logger(error)
+                    retError = error;
                 } else {
-                    self.logger("request OK: " + json.command);
-                    ret = json;
-                    //self.callback(json);
+                    var responseJson = JSON.parse(body);
+                    if (responseJson.success == false) {
+                        /* request answered by hyperion, but with issues */
+                        self.logger("request executed with issues: " + responseJson.command);
+                        self.logger(responseJson.error)
+                        retError = responseJson.error;
+                    } else {
+                        /* request was executed properly by hyperion */
+                        self.logger("request executed properly: " + responseJson.command);
+                        switch(responseJson.command) {
+                            
+                            case "serverinfo": {
+                                break;
+                            }
+                            case "sysinfo": {
+                                break;
+                            }
+                            case "color": {
+                                break;
+                            }
+                            case "sourceselect": {
+                                break;
+                            }
+                            default: {
+                                break;
+                            }
+                        }
+                    }
                 }
+                /* finally, notify application via callback */
+                self.callback(retCommand, retError);                
             }
-            
-            //self.logger("calling clbk: " + self.callback);
-            self.callback(ret);
-        } );      
-        
+        );
     }
-    
+
 }
 
 
