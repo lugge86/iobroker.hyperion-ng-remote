@@ -45,8 +45,8 @@ class HyperionNgRemote extends utils.Adapter {
 
         // The adapters config (in the instance object everything under the attribute "native") is accessible via
         // this.config:
-        //this.log.info("config option1: " + this.config.option1);
-        //this.log.info("config option2: " + this.config.option2);
+        this.log.info("config User IP: " + this.config.gui_ip);
+        this.log.info("config Port: " + this.config.gui_port);
 
         /*
         For every state in the system there has to be also an object of type state
@@ -97,7 +97,6 @@ class HyperionNgRemote extends utils.Adapter {
         //this.log.info( this.conn.GetJsonAddress() );
         this.conn.ServerInfo();
         this.conn.SysInfo();
-        this.log.info("sended both requests");
 
         this.conn.Color( [255,0,0], 200, 0)
         this.conn.Color( [0,255,0], 201, 0)
@@ -151,7 +150,6 @@ class HyperionNgRemote extends utils.Adapter {
 
             switch(id){
                 case "hyperion-ng-remote.0.selectPrio": {
-                    this.log.info("selectPrio");
                     this.conn.SourceSelection(state.val);
                     break;
                 }
@@ -277,6 +275,18 @@ class HyperionApi
             //"duration": duration
         };
         this.SendRequest(requestJson);
+    }
+
+    Clear(prio) {
+        var requestJson = {
+            command: "clear",
+            priority: prio
+        };
+        this.SendRequest(requestJson);
+    }
+
+    ClearAll() {
+        this.Clear(-1);
     }
 
     SendRequest(requestJson) {
