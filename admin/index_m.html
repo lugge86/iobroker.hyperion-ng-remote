@@ -18,18 +18,23 @@
     <script type="text/javascript" src="../../lib/js/selectID.js"></script>
     <script type="text/javascript" src="../../lib/js/materialize.js"></script>
     <script type="text/javascript" src="../../js/adapter-settings.js"></script>
-    
+
     <!-- Load our own files -->
     <link rel="stylesheet" type="text/css" href="style.css" />
     <script type="text/javascript" src="words.js"></script>
 
     <script type="text/javascript">
+
+
         var colors = [];
         var effects = [];
+
         // This will be called by the admin adapter when the settings page loads
         function load(settings, onChange) {
             // example: select elements with id=key and class=value and insert value
-            if (!settings) return;
+            if (!settings) {
+                return;
+            }
             $('.value').each(function () {
                 var $key = $(this);
                 var id = $key.attr('id');
@@ -46,14 +51,15 @@
                         ;
                 }
             });
-            
+
             colors = settings.colors || [];
-            
+            effects = settings.effects || [];
+
             onChange(false);
-            
+
             values2table('colors', colors, onChange);
             values2table('effects', effects, onChange);
-            
+
             // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
             if (M) M.updateTextFields();
         }
@@ -70,6 +76,7 @@
                     obj[$this.attr('id')] = $this.val();
                 }
             });
+
             obj.colors = table2values('colors');
             obj.effects = table2values('effects');
             callback(obj);
@@ -81,7 +88,7 @@
 <body>
 <div class="m adapter-container">
     <div class="row">
-    
+
         <div class="col s12">
             <ul class="tabs">
                 <li class="tab col s2"><a href="#tab-main"      class="translate active">Main settings</a></li>
@@ -89,28 +96,28 @@
                 <li class="tab col s2"><a href="#tab-colors"    class="translate">Colors</a></li>
                 <li class="tab col s2"><a href="#tab-effects"    class="translate">Effects</a></li>
             </ul>
-        </div>        
-        
+        </div>
+
         <div id="tab-main" class="col s12 page">
             <div class="row">
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="gui_ip" />
-                    <label for="gui_ip" class="translate">Server IP</label>
+                    <input type="text" class="value" id="serverIp" />
+                    <label for="serverIp" class="translate">Server IP</label>
                 </div>
 
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="gui_port" />
-                    <label for="gui_port" class="translate">Port</label>
+                    <input type="text" class="value" id="serverPort" />
+                    <label for="serverPort" class="translate">Port</label>
                 </div>
             </div>
         </div>
-        
+
         <div id="tab-components" class="col s12 page">
         </div>
-        
+
         <div id="tab-colors" class="col s12 page">
             <div class="col s12" id="colors">
-            <a class="btn-floating waves-effect waves-light blue table-button-add"><i class="material-icons">add</i></a>
+                <a class="btn-floating waves-effect waves-light blue table-button-add"><i class="material-icons">add</i></a>
                 <div class="table-values-div">
                     <table class="table-values">
                         <thead>
@@ -125,29 +132,29 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="tab-effects" class="col s12 page">
             <div class="col s12" id="effects">
                 <a class="btn-floating waves-effect waves-light blue table-button-add"><i class="material-icons">add</i></a>
                 <div class="table-values-div">
                     <table class="table-values">
                         <thead>
-                        <tr>
-                            <th data-name="name" class="translate">Name</th>
-                            <th data-name="prio" class="translate">Priority</th>
-                            <th data-name="color" class="translate">effect</th>
-                            <th data-buttons="delete up down"></th>
-                        </tr>
+                            <tr>
+                                <th data-name="name" class="translate">Name</th>
+                                <th data-name="prio" class="translate">Priority</th>
+                                <th data-name="color" class="translate">effect</th>
+                                <th data-buttons="delete up down"></th>
+                            </tr>
                         </thead>
                     </table>
                 </div>
             </div>
         </div>
-        
-    
 
-    
-    
+
+
+
+
     </div>
 </div>
 </body>

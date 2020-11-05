@@ -16,7 +16,14 @@ class HyperionNgRemote extends utils.Adapter {
 
     sysinfoFinished = false;
     serverinfoFinished = false;
-    adapterConnected = false;
+
+    currentState = null;
+
+    states = {
+        init: 1,
+        connecting: 2,
+        connected: 3
+    };
 
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
@@ -31,6 +38,8 @@ class HyperionNgRemote extends utils.Adapter {
         // this.on("objectChange", this.onObjectChange.bind(this));
         // this.on("message", this.onMessage.bind(this));
         this.on("unload", this.onUnload.bind(this));
+
+        this.currentState = this.states.init;
     }
 
 
@@ -45,8 +54,8 @@ class HyperionNgRemote extends utils.Adapter {
 
         // The adapters config (in the instance object everything under the attribute "native") is accessible via
         // this.config:
-        this.log.info("config User IP: " + this.config.gui_ip);
-        this.log.info("config Port: " + this.config.gui_port);
+        this.log.info("config User IP: " + this.config.serverIp);
+        this.log.info("config Port: " + this.config.serverPort);
 
         /*
         For every state in the system there has to be also an object of type state
@@ -95,13 +104,9 @@ class HyperionNgRemote extends utils.Adapter {
 
         this.conn = new HyperionApi("192.168.0.83", "8090", this.NotifyCallback.bind(this), this.log.info);
         //this.log.info( this.conn.GetJsonAddress() );
-        this.conn.ServerInfo();
-        this.conn.SysInfo();
 
-        this.conn.Color( [255,0,0], 200, 0)
-        this.conn.Color( [0,255,0], 201, 0)
-        this.conn.Color( [0,0,255], 202, 0)
 
+        this.ProcessStateMachine();
     }
 
     /**
@@ -191,15 +196,50 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
             }
+        }
 
-            if ( (this.adapterConnected == false) && (this.sysinfoFinished == true) && (this.serverinfoFinished == true) )
-            {
-                this.log.info("adapterConnected");
-                this.adapterConnected = true
-                this.setState("info.connection", true, true);
+        this.ProcessStateMachine();
+    }
+
+    ProcessStateMachine() {
+
+        switch (this.currentState) {
+            case this.states.init: {
+
+                this.conn.ServerInfo();
+                this.conn.SysInfo();
+                
+                this.currentState = this.states.connecting;
+                this.log.info("init => connecting");
+
+                break;
+            }
+            case this.states.connecting: {
+
+                if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
+
+                    this.setState("info.connection", true, true);
+
+                    this.conn.Color( [255,0,0], 200, 0)
+                    this.conn.Color( [0,255,0], 201, 0)
+                    this.conn.Color( [0,0,255], 202, 0)
+
+                    this.currentState = this.states.connected;
+                    this.log.info("connecting => connected");
+                }
+
+                break;
+            }
+            case this.states.connected: {
+                break;
+            }
+            default: {
+                break;
             }
         }
+
     }
+
 }
 
 
@@ -223,6 +263,7 @@ class HyperionApi
         this.SendRequest(requestJson);
     }
 
+/***********************************************************/
     ServerInfo() {
         var requestJson = {
             command: "serverinfo",
@@ -235,9 +276,9 @@ class HyperionApi
         //todo: store serverinfo data
     }
 
-    GetServerInfoComponents() {
+    GetComponents() {
         ret = null;
-
+        //todo
         return ret;
     }
 
@@ -247,6 +288,27 @@ class HyperionApi
         return ret;
     }
 
+    GetEffectList() {
+        effectList = [];
+        for (effect in serverinfo.effects) {
+            effectList.push(effect.name);
+        }
+        return effectList;
+    }
+
+    GetEffectDetails(name) {
+        ret = null;
+        for (effect in serverinfo.effects) {
+            if (effect.name == name) {
+                ret = effect;
+                break;
+            }
+        }
+        return ret;
+    }
+
+
+/***********************************************************/
     SysInfo() {
         var requestJson = {
             command: "sysinfo",
@@ -265,6 +327,7 @@ class HyperionApi
         return ret;
     }
 
+/***********************************************************/
     Color(color, prio, duration) {
         var requestJson = {
             command: "color",
@@ -277,6 +340,7 @@ class HyperionApi
         this.SendRequest(requestJson);
     }
 
+/***********************************************************/
     Clear(prio) {
         var requestJson = {
             command: "clear",
@@ -289,6 +353,7 @@ class HyperionApi
         this.Clear(-1);
     }
 
+/***********************************************************/
     SendRequest(requestJson) {
         /* first, create object containing all the needed options for our request */
         var requestString = JSON.stringify(requestJson);
@@ -329,7 +394,7 @@ class HyperionApi
                         /* request was executed properly by hyperion */
                         self.logger("request executed properly: " + responseJson.command);
                         switch(responseJson.command) {
-                            
+
                             case "serverinfo": {
                                 break;
                             }
@@ -349,7 +414,7 @@ class HyperionApi
                     }
                 }
                 /* finally, notify application via callback */
-                self.callback(retCommand, retError);                
+                self.callback(retCommand, retError);
             }
         );
     }
