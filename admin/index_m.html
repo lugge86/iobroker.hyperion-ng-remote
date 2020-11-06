@@ -109,6 +109,11 @@
                     <input type="text" class="value" id="serverPort" />
                     <label for="serverPort" class="translate">Port</label>
                 </div>
+
+                <div class="col s6 input-field">
+                    <input type="text" class="value" id="appname" />
+                    <label for="appname" class="translate">Name of this Hyperion client</label>
+                </div>
             </div>
         </div>
 
@@ -122,8 +127,8 @@
                     <table class="table-values">
                         <thead>
                             <tr>
-                                <th data-name="name" class="translate">Name</th>
-                                <th data-name="prio" class="translate">Priority</th>
+                                <th data-name="name" data-type="text" class="translate">Name</th>
+                                <th data-name="prio" data-type="number" class="translate">Priority</th>
                                 <th data-name="color" data-type="color" class="translate">color</th>
                                 <th data-buttons="delete up down"></th>
                             </tr>

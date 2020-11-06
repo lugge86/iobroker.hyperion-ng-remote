@@ -8,6 +8,7 @@
 // you need to create an adapter
 const utils = require("@iobroker/adapter-core");
 const request = require('request');
+const schedule = require('node-schedule');
 
 // Load your modules here, e.g.:
 // const fs = require("fs");
@@ -16,13 +17,24 @@ class HyperionNgRemote extends utils.Adapter {
 
     sysinfoFinished = false;
     serverinfoFinished = false;
+    
+    colorsConfigured = 0;
+    colorsConfiguredConfirmed = 0;
+    
+    priosDeleted = 0;
+    priosDeletedConfirmed = 0;
+    
+    cycleTimer = null;
 
     currentState = null;
 
     states = {
         init: 1,
         connecting: 2,
-        connected: 3
+        cleaning: 3,
+        configuring: 4,
+        ready: 5,
+        error: 6
     };
 
     /**
@@ -65,7 +77,7 @@ class HyperionNgRemote extends utils.Adapter {
         await this.setObjectNotExistsAsync("selectPrio", {
             type: "state",
             common: {
-                name: "testVariable",
+                name: "select active priority",
                 type: "number",
                 role: "state",
                 read: true,
@@ -102,11 +114,8 @@ class HyperionNgRemote extends utils.Adapter {
         //this.log.info("check group user admin group admin: " + result);
 
 
-        this.conn = new HyperionApi("192.168.0.83", "8090", this.NotifyCallback.bind(this), this.log.info);
-        //this.log.info( this.conn.GetJsonAddress() );
-
-
         this.ProcessStateMachine();
+        this.cycleTimer = schedule.scheduleJob("*/5 * * * * *", this.ProcessStateMachine.bind(this)  );
     }
 
     /**
@@ -150,32 +159,30 @@ class HyperionNgRemote extends utils.Adapter {
      * @param {ioBroker.State | null | undefined} state
      */
     onStateChange(id, state) {
-        if (state) {
-            this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+        if (this.currentState == this.states.ready) {
+            if (state) {
+                
+                switch(id){
+                    case "hyperion-ng-remote.0.selectPrio": {
+                        this.conn.SourceSelection(state.val);
+                        break;
+                    }
+                    default: {
+                        break;
+                    }
+                }
 
-            switch(id){
-                case "hyperion-ng-remote.0.selectPrio": {
-                    this.conn.SourceSelection(state.val);
-                    break;
-                }
-                default: {
-                    break;
-                }
+            } else {
+                this.log.info(`state ${id} deleted`);
+                //todo: throw error
             }
-
-        } else {
-            this.log.info(`state ${id} deleted`);
-            //todo: throw error
         }
     }
 
 
     NotifyCallback(command, error)
     {
-        this.log.info("callback for: " + command);
-
         if (error) {
-            this.log.info("error with request: " + command);
         } else {
             switch(command) {
                 case "serverinfo": {
@@ -187,9 +194,14 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
                 case "color": {
+                    this.colorsConfiguredConfirmed++;
                     break;
                 }
                 case "sourceselect": {
+                    break;
+                }
+                case "clear": {
+                    this.priosDeletedConfirmed++;
                     break;
                 }
                 default: {
@@ -206,41 +218,125 @@ class HyperionNgRemote extends utils.Adapter {
         switch (this.currentState) {
             case this.states.init: {
 
-                this.conn.ServerInfo();
-                this.conn.SysInfo();
-                
-                this.currentState = this.states.connecting;
-                this.log.info("init => connecting");
-
-                break;
-            }
-            case this.states.connecting: {
-
-                if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
-
-                    this.setState("info.connection", true, true);
-
-                    this.conn.Color( [255,0,0], 200, 0)
-                    this.conn.Color( [0,255,0], 201, 0)
-                    this.conn.Color( [0,0,255], 202, 0)
-
-                    this.currentState = this.states.connected;
-                    this.log.info("connecting => connected");
+                if (1) {
+                    /* create hyperion api obj and send initial commands to get some information from server */
+                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info);
+                    this.conn.ServerInfo();
+                    this.conn.SysInfo();
+                    
+                    this.currentState = this.states.connecting;
+                    this.log.info("init => connecting");
+                }
+                else{
+                    /* error with IP config, no connection to server possible */
+                    this.log.info("Error with IP config");
+                    this.currentState = this.states.error;
+                    this.log.info("init => error");
                 }
 
                 break;
             }
-            case this.states.connected: {
+
+            case this.states.connecting: {
+                /*
+                 * In this state we just wait till we are "connected" to hyperion,
+                 * this is when the serverinfo and sysinfo commands have returned.
+                 */
+                if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
+                    /* start cleaning the server from old configuration data */
+                    this.Clean();
+
+                    this.currentState = this.states.cleaning;
+                    this.log.info("connecting => cleaning");
+                }
+
                 break;
             }
+
+            case this.states.cleaning: {
+
+                if( this.priosDeleted == this.priosDeletedConfirmed ) {
+                    /* now write our color and effect configuration to hyperion */
+                    this.ColorConfig();
+                    
+                    this.currentState = this.states.configuring;
+                    this.log.info("cleaning => configuring");
+                }
+
+                break;
+            }
+
+            case this.states.configuring: {
+                /*
+                 * Here we wait till all configuration jobs have been
+                 * confirmed by hyperion server.
+                 */
+
+                if ( this.colorsConfigured == this.colorsConfiguredConfirmed ) {
+                    /* all went well, create DPs and set adapter info to "connected" */
+                    this.CreateDataPoints();
+                    this.setState("info.connection", true, true);
+
+                    this.currentState = this.states.ready;
+                    this.log.info("configuring => ready");
+                }
+
+                break;
+            }
+
+            case this.states.ready: {
+                /* nothing to do here, this is the normal operation mode */
+                break;
+            }
+
+            case this.states.error: {
+                /* do nothing */
+                break;
+            }
+
             default: {
                 break;
             }
+            
+            this.ProcessStateMachine();
         }
-
     }
 
+
+    Clean() {
+        var configuredPrios = this.conn.GetServerInfoPriorities()
+        for (var prio of configuredPrios) {
+            if (prio.origin == this.config.appName) {
+                /* this was set by us in an previous run, thus, get rid of it */
+                this.conn.Clear(prio.priority);
+                this.priosDeleted++;
+            }
+        }
+    }
+
+
+    CreateDataPoints() {
+    }
+
+
+    ColorConfig() {
+        const hexToRgb = function (hex) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+            ] : null;
+        }
+
+        for(var color of this.config.colors) {
+            this.conn.Color( hexToRgb(color.color), Number(color.prio), 0);
+            this.colorsConfigured++;
+        }
+    }
 }
+
+
 
 
 class HyperionApi
@@ -248,8 +344,8 @@ class HyperionApi
     sysinfo = null;
     serverinfo = null;
 
-    constructor(ip, port, notifyClbk, logger) {
-        logger("Creating new Connection with IP "+ ip);
+    constructor(ip, port, origin, notifyClbk, logger) {
+        this.origin = origin;
         this.callback = notifyClbk;
         this.logger = logger;
         this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";
@@ -273,40 +369,12 @@ class HyperionApi
     }
 
     ServerInfoClbk(data) {
-        //todo: store serverinfo data
-    }
-
-    GetComponents() {
-        ret = null;
-        //todo
-        return ret;
+        this.serverinfo = data;
     }
 
     GetServerInfoPriorities() {
-        ret = null;
-
-        return ret;
+        return this.serverinfo.info.priorities;
     }
-
-    GetEffectList() {
-        effectList = [];
-        for (effect in serverinfo.effects) {
-            effectList.push(effect.name);
-        }
-        return effectList;
-    }
-
-    GetEffectDetails(name) {
-        ret = null;
-        for (effect in serverinfo.effects) {
-            if (effect.name == name) {
-                ret = effect;
-                break;
-            }
-        }
-        return ret;
-    }
-
 
 /***********************************************************/
     SysInfo() {
@@ -318,12 +386,63 @@ class HyperionApi
     }
 
     SysInfoClbk(data) {
-        //todo: store sysinfo data
+        this.sysinfo = data;
     }
 
     GetSysInfo() {
-        ret = null;
+        return this.sysinfo;
+    }
 
+
+/***********************************************************/
+
+    ComponentState(name, enabled) {
+        var requestJson = {
+            command: "componentstate",
+            componentstate: {
+                component: name,
+                state: enabled
+            }
+        };
+        this.SendRequest(requestJson);
+    }
+
+    GetComponentList() {
+        componentList = [];
+        for (component of serverinfo.components) {
+            componentList.push(component.name);
+        }
+        return componentList;
+    }
+
+    GetComponentEnabled(name) {
+        ret = null;
+        for (component of serverinfo.components) {
+            if (component.name == name) {
+                ret = component.enabled;
+            }
+        }
+
+        return ret;
+    }
+
+/***********************************************************/
+    GetEffectList() {
+        effectList = [];
+        for (effect of serverinfo.effects) {
+            effectList.push(effect.name);
+        }
+        return effectList;
+    }
+
+    GetEffectDetails(name) {
+        ret = null;
+        for (effect of serverinfo.effects) {
+            if (effect.name == name) {
+                ret = effect;
+                break;
+            }
+        }
         return ret;
     }
 
@@ -333,7 +452,7 @@ class HyperionApi
             command: "color",
             color: color,
             priority: prio,
-            origin: "hyperion ng adapter"
+            origin: this.origin
             //todo
             //"duration": duration
         };
@@ -372,6 +491,7 @@ class HyperionApi
          * The result will later be available in the request callback.
          */
         var self = this;
+        this.logger("sending request: " + requestJson.command);
         request.post(requestOptions,
             function(error, response, body) {
 
@@ -396,9 +516,11 @@ class HyperionApi
                         switch(responseJson.command) {
 
                             case "serverinfo": {
+                                self.ServerInfoClbk(responseJson);
                                 break;
                             }
                             case "sysinfo": {
+                                self.SysInfoClbk(responseJson);
                                 break;
                             }
                             case "color": {
