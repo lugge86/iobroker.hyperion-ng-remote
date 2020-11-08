@@ -63,6 +63,9 @@
         "type": "lighting",
         "compact": true,
         "materialize": true,
+        "messagebox": true,
+        "message": true,
+        "subscribe": "messagebox",
         "materializeTab": true,
         "adminTab": {
             "singleton": true,

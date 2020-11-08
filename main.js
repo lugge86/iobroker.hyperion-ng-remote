@@ -13,6 +13,15 @@ const schedule = require('node-schedule');
 // Load your modules here, e.g.:
 // const fs = require("fs");
 
+
+
+function Test_Ui()
+{
+    return true;
+}
+
+
+
 class HyperionNgRemote extends utils.Adapter {
 
     sysinfoFinished = false;
@@ -48,7 +57,7 @@ class HyperionNgRemote extends utils.Adapter {
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
         // this.on("objectChange", this.onObjectChange.bind(this));
-        // this.on("message", this.onMessage.bind(this));
+         this.on("message", this.onMessage.bind(this));
         this.on("unload", this.onUnload.bind(this));
 
         this.currentState = this.states.init;
@@ -135,6 +144,27 @@ class HyperionNgRemote extends utils.Adapter {
             callback();
         }
     }
+    
+    
+     onMessage(obj) {
+         if (typeof obj === "object" && obj.message) {
+             
+             this.log.info("received message");
+             
+             if (obj.command === "send") {
+                 // e.g. send email or pushover or whatever
+                 this.log.info("send command");
+
+                 //Send response in callback if required
+                 //if (obj.callback) {
+                     this.sendTo(obj.from, obj.command, "Message received", obj.callback);
+                 //}
+             }
+             if (obj.command === "test") {
+                 this.log.info("testestest");
+             }
+         }
+     }
 
     // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
     // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
@@ -226,6 +256,14 @@ class HyperionNgRemote extends utils.Adapter {
                     
                     this.currentState = this.states.connecting;
                     this.log.info("init => connecting");
+                    
+                    //todo
+                    //var self = this;
+                    //sendTo(namespace, 'send', data, function(reply) {
+                        
+                    //    self.log.info("hier ist der callback");
+                    //});
+                    
                 }
                 else{
                     /* error with IP config, no connection to server possible */
@@ -279,6 +317,10 @@ class HyperionNgRemote extends utils.Adapter {
 
                     this.currentState = this.states.ready;
                     this.log.info("configuring => ready");
+                    
+                    //todo:
+                    this.effList = this.conn.GetEffectList();
+                    this.cmpList = this.conn.GetComponentList();
                 }
 
                 break;
@@ -305,8 +347,8 @@ class HyperionNgRemote extends utils.Adapter {
 
     Clean() {
         var configuredPrios = this.conn.GetServerInfoPriorities()
-        for (var prio of configuredPrios) {
-            if (prio.origin == this.config.appName) {
+        for (var prio of configuredPrios) {            
+            if ( prio.origin.includes(this.config.appname) ) {
                 /* this was set by us in an previous run, thus, get rid of it */
                 this.conn.Clear(prio.priority);
                 this.priosDeleted++;
@@ -408,42 +450,12 @@ class HyperionApi
     }
 
     GetComponentList() {
-        componentList = [];
-        for (component of serverinfo.components) {
-            componentList.push(component.name);
-        }
-        return componentList;
-    }
-
-    GetComponentEnabled(name) {
-        ret = null;
-        for (component of serverinfo.components) {
-            if (component.name == name) {
-                ret = component.enabled;
-            }
-        }
-
-        return ret;
+        return this.serverinfo.info.components;
     }
 
 /***********************************************************/
     GetEffectList() {
-        effectList = [];
-        for (effect of serverinfo.effects) {
-            effectList.push(effect.name);
-        }
-        return effectList;
-    }
-
-    GetEffectDetails(name) {
-        ret = null;
-        for (effect of serverinfo.effects) {
-            if (effect.name == name) {
-                ret = effect;
-                break;
-            }
-        }
-        return ret;
+        return this.serverinfo.info.effects;
     }
 
 /***********************************************************/
@@ -461,6 +473,13 @@ class HyperionApi
 
 /***********************************************************/
     Clear(prio) {
+        
+        if (prio > 253)
+        {
+            //todo: throw error
+            return;
+        }
+        
         var requestJson = {
             command: "clear",
             priority: prio
