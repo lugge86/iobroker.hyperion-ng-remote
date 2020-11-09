@@ -62,29 +62,43 @@
 
             // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
             if (M) M.updateTextFields();
-            
- 
-    var elems = document.querySelectorAll('#effectselect');    
+
+
+    messages = [];
+    
+    var elems = document.querySelectorAll('#effectselect');
     //elems.append(' <option value="4">Option 4</option>');
     
+    effectSelect = $('#effectselect');
+    
+    //effectSelect.append(' <option value="4">Option 4</option>');
+
     var dest = adapter + "." + instance;
     
-    sendTo(dest, 'send', {par1: instance, par2: adapter, par3: adapter}, function (response) {
-        $('#effectselect').append(' <option value="4">Option 4</option>').bind(this);
-        sendTo(dest, 'test', {par1: "hallo", par2: "welt", par3: adapter}, function (response) {});
-    });
+    messages.push("Test1");
     
+    showMessages();
+
+
+        sendTo(dest, 'send', {par1: effectSelect, par2: adapter, par3: adapter}, effectList => {        
+            for (var entry of effectList) {
+                effectSelect.append('<option>' + entry + '</option>');
+            }
+            effectSelect.select();
+        });
+
+
     //if (adapter.Test_Ui() == true)
     //{
     //    $('#effectselect').append(' <option value="4">Option 4</option>');
     //}
-    
-    
-    
-    
+
+
+
+
     //var instances = M.FormSelect.init(elems, options);
 
-            
+
         }
 
         // This will be called by the admin adapter when the user presses the save button
@@ -104,11 +118,21 @@
             obj.effects = table2values('effects');
             callback(obj);
         }
+        
+        
+function showMessages() {
+    let data = '';
+    for (const ind in messages) {
+        const mess = messages[ind];
+        data = mess + '\n' + data;
+    }
+    $('#stdout').text(data);
+}
+        
+        
     </script>
-    
-    <script>
 
-    </script>
+
 
 </head>
 
@@ -141,19 +165,19 @@
                     <input type="text" class="value" id="appname" />
                     <label for="appname" class="translate">Name of this Hyperion client</label>
                 </div>
-                
+
                 <div class="input-field col s12">
                     <select class="value" id="effectselect">
-                        <option value="" disabled selected>Choose your option</option>
-                        <option value="1">Option 1</option>
-                        <option value="2">Option 2</option>
-                        <option value="3">Option 3</option>
-                    </select>
-                    <label>Materialize Select</label>
+                        <option value="" disabled selected>Choose effect</option>
+                    </select>                    
                 </div>
                 
-                
-                
+                <div class="row textarea">
+                    <textarea id="stdout" disabled="disabled" cols="120" rows="30" style="height: calc(100% - 115px)"></textarea>
+                </div>
+
+
+
             </div>
         </div>
 
@@ -186,8 +210,12 @@
                         <thead>
                             <tr>
                                 <th data-name="name" class="translate">Name</th>
-                                <th data-name="prio" class="translate">Priority</th>
-                                <th data-name="color" class="translate">effect</th>
+                                <th data-name="prio" class="translate">Priority</th>                                
+                                <th>
+                                <select class="value" id="effectselect">
+                                    <option value="" disabled selected>Choose effect</option>
+                                </select>
+                                </th>
                                 <th data-buttons="delete up down"></th>
                             </tr>
                         </thead>

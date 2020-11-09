@@ -26,15 +26,14 @@ class HyperionNgRemote extends utils.Adapter {
 
     sysinfoFinished = false;
     serverinfoFinished = false;
-    
-    colorsConfigured = 0;
-    colorsConfiguredConfirmed = 0;
-    
-    priosDeleted = 0;
-    priosDeletedConfirmed = 0;
-    
-    cycleTimer = null;
 
+    configElementsRequested = 0;
+    configElementsConfirmed = 0;
+
+    deleteionRequested = 0;
+    deleteionConfirmed = 0;
+
+    cycleTimer = null;
     currentState = null;
 
     states = {
@@ -144,24 +143,24 @@ class HyperionNgRemote extends utils.Adapter {
             callback();
         }
     }
-    
-    
+
+
      onMessage(obj) {
          if (typeof obj === "object" && obj.message) {
-             
-             this.log.info("received message");
-             
+
              if (obj.command === "send") {
                  // e.g. send email or pushover or whatever
                  this.log.info("send command");
 
                  //Send response in callback if required
-                 //if (obj.callback) {
-                     this.sendTo(obj.from, obj.command, "Message received", obj.callback);
-                 //}
-             }
+                 if (obj.callback) {
+                     
+                     this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
+                 }
+             }             
+             
              if (obj.command === "test") {
-                 this.log.info("testestest");
+                 this.log.info(obj.message.par1);
              }
          }
      }
@@ -191,7 +190,7 @@ class HyperionNgRemote extends utils.Adapter {
     onStateChange(id, state) {
         if (this.currentState == this.states.ready) {
             if (state) {
-                
+
                 switch(id){
                     case "hyperion-ng-remote.0.selectPrio": {
                         this.conn.SourceSelection(state.val);
@@ -224,14 +223,14 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
                 case "color": {
-                    this.colorsConfiguredConfirmed++;
+                    this.configElementsConfirmed++;
                     break;
                 }
                 case "sourceselect": {
                     break;
                 }
                 case "clear": {
-                    this.priosDeletedConfirmed++;
+                    this.deleteionConfirmed++;
                     break;
                 }
                 default: {
@@ -253,17 +252,17 @@ class HyperionNgRemote extends utils.Adapter {
                     this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info);
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
-                    
+
                     this.currentState = this.states.connecting;
                     this.log.info("init => connecting");
-                    
+
                     //todo
                     //var self = this;
                     //sendTo(namespace, 'send', data, function(reply) {
-                        
+
                     //    self.log.info("hier ist der callback");
                     //});
-                    
+
                 }
                 else{
                     /* error with IP config, no connection to server possible */
@@ -293,10 +292,10 @@ class HyperionNgRemote extends utils.Adapter {
 
             case this.states.cleaning: {
 
-                if( this.priosDeleted == this.priosDeletedConfirmed ) {
+                if( this.deleteionRequested == this.deleteionConfirmed ) {
                     /* now write our color and effect configuration to hyperion */
-                    this.ColorConfig();
-                    
+                    this.WriteConfig();
+
                     this.currentState = this.states.configuring;
                     this.log.info("cleaning => configuring");
                 }
@@ -310,16 +309,16 @@ class HyperionNgRemote extends utils.Adapter {
                  * confirmed by hyperion server.
                  */
 
-                if ( this.colorsConfigured == this.colorsConfiguredConfirmed ) {
+                if ( this.configElementsRequested == this.configElementsConfirmed ) {
                     /* all went well, create DPs and set adapter info to "connected" */
                     this.CreateDataPoints();
                     this.setState("info.connection", true, true);
 
                     this.currentState = this.states.ready;
                     this.log.info("configuring => ready");
-                    
+
                     //todo:
-                    this.effList = this.conn.GetEffectList();
+                    this.effList = this.conn.GetEffects();
                     this.cmpList = this.conn.GetComponentList();
                 }
 
@@ -339,7 +338,7 @@ class HyperionNgRemote extends utils.Adapter {
             default: {
                 break;
             }
-            
+
             this.ProcessStateMachine();
         }
     }
@@ -347,21 +346,27 @@ class HyperionNgRemote extends utils.Adapter {
 
     Clean() {
         var configuredPrios = this.conn.GetServerInfoPriorities()
-        for (var prio of configuredPrios) {            
+        for (var prio of configuredPrios) {
             if ( prio.origin.includes(this.config.appname) ) {
                 /* this was set by us in an previous run, thus, get rid of it */
                 this.conn.Clear(prio.priority);
-                this.priosDeleted++;
+                this.deleteionRequested++;
             }
         }
     }
 
 
     CreateDataPoints() {
+        //var effects = this.conn.GetEffects()
     }
 
 
-    ColorConfig() {
+    WriteConfig() {
+
+        /*
+         * We need a little helper function to convert the color string (e.g. #12AB3F)
+         * from the adapter config into an array of RGB values.
+         */
         const hexToRgb = function (hex) {
             var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
             return result ? [
@@ -371,9 +376,16 @@ class HyperionNgRemote extends utils.Adapter {
             ] : null;
         }
 
+        /* take every color from user configuration and send it to hyperion server */
         for(var color of this.config.colors) {
             this.conn.Color( hexToRgb(color.color), Number(color.prio), 0);
-            this.colorsConfigured++;
+            this.configElementsRequested++;
+        }
+
+        /* then do the same again with the effects... */
+        for(var effect of this.config.effects) {
+            this.conn.Effect( effect.name, Number(effect.prio), 0);
+            this.configElementsRequested++;
         }
     }
 }
@@ -435,9 +447,7 @@ class HyperionApi
         return this.sysinfo;
     }
 
-
 /***********************************************************/
-
     ComponentState(name, enabled) {
         var requestJson = {
             command: "componentstate",
@@ -454,8 +464,20 @@ class HyperionApi
     }
 
 /***********************************************************/
-    GetEffectList() {
+    GetEffects() {
         return this.serverinfo.info.effects;
+    }
+
+    GetEffectList() {
+        var ret = new Array();
+        
+        if (this.serverinfo) {
+            for (var effect of this.serverinfo.info.effects) {
+                ret.push(effect.name);
+            }
+        }
+
+        return ret;
     }
 
 /***********************************************************/
@@ -472,14 +494,29 @@ class HyperionApi
     }
 
 /***********************************************************/
+    Effect(effect, prio, duration) {
+        var requestJson = {
+            command: "effect",
+            effect: {
+                name: effect
+            },
+            priority: prio,
+            origin: this.origin
+            //todo
+            //"duration": duration
+        };
+        this.SendRequest(requestJson);
+    }
+
+/***********************************************************/
     Clear(prio) {
-        
+
         if (prio > 253)
         {
             //todo: throw error
             return;
         }
-        
+
         var requestJson = {
             command: "clear",
             priority: prio
