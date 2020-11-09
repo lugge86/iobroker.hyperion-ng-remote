@@ -64,8 +64,6 @@
             if (M) M.updateTextFields();
 
 
-    messages = [];
-    
     var elems = document.querySelectorAll('#effectselect');
     //elems.append(' <option value="4">Option 4</option>');
     
@@ -75,11 +73,6 @@
 
     var dest = adapter + "." + instance;
     
-    messages.push("Test1");
-    
-    showMessages();
-
-
         sendTo(dest, 'send', {par1: effectSelect, par2: adapter, par3: adapter}, effectList => {        
             for (var entry of effectList) {
                 effectSelect.append('<option>' + entry + '</option>');
@@ -118,16 +111,6 @@
             obj.effects = table2values('effects');
             callback(obj);
         }
-        
-        
-function showMessages() {
-    let data = '';
-    for (const ind in messages) {
-        const mess = messages[ind];
-        data = mess + '\n' + data;
-    }
-    $('#stdout').text(data);
-}
         
         
     </script>
@@ -172,9 +155,61 @@ function showMessages() {
                     </select>                    
                 </div>
                 
-                <div class="row textarea">
-                    <textarea id="stdout" disabled="disabled" cols="120" rows="30" style="height: calc(100% - 115px)"></textarea>
-                </div>
+                    <table class="table-values">
+                        <thead>
+                            <tr>
+                                <th data-name="name" class="translate">Name</th>
+                                <th data-name="prio" class="translate">Priority</th>                                
+                                <th> effect</th>
+                                <th data-buttons="delete up down"></th>
+                            </tr>
+                        </thead>
+                        
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                        </tbody>
+                        
+                        
+                        
+                    </table>
 
 
 
@@ -211,22 +246,59 @@ function showMessages() {
                             <tr>
                                 <th data-name="name" class="translate">Name</th>
                                 <th data-name="prio" class="translate">Priority</th>                                
-                                <th>
-                                <select class="value" id="effectselect">
-                                    <option value="" disabled selected>Choose effect</option>
-                                </select>
-                                </th>
+                                <th> effect</th>
                                 <th data-buttons="delete up down"></th>
                             </tr>
                         </thead>
+                        
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <input class="values-input" type="text" data-index="0" data-name="name">
+                                </td>
+                                <td>
+                                    <select class="value" id="effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>                            
+                            </tr>
+                        </tbody>
+                        
+                        
+                        
                     </table>
                 </div>
             </div>
         </div>
-
-
-
-
 
     </div>
 </div>
