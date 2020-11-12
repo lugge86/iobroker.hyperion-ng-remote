@@ -222,6 +222,10 @@ class HyperionNgRemote extends utils.Adapter {
                     this.configElementsConfirmed++;
                     break;
                 }
+                case "effect": {
+                    this.configElementsConfirmed++;
+                    break;
+                }
                 case "sourceselect": {
                     break;
                 }
