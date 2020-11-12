@@ -14,14 +14,6 @@ const schedule = require('node-schedule');
 // const fs = require("fs");
 
 
-
-function Test_Ui()
-{
-    return true;
-}
-
-
-
 class HyperionNgRemote extends utils.Adapter {
 
     sysinfoFinished = false;
@@ -76,12 +68,8 @@ class HyperionNgRemote extends utils.Adapter {
         // this.config:
         this.log.info("config User IP: " + this.config.serverIp);
         this.log.info("config Port: " + this.config.serverPort);
-
-        /*
-        For every state in the system there has to be also an object of type state
-        Here a simple template for a boolean variable named "testVariable"
-        Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-        */
+        
+        //todo: move this
         await this.setObjectNotExistsAsync("selectPrio", {
             type: "state",
             common: {
@@ -92,9 +80,17 @@ class HyperionNgRemote extends utils.Adapter {
                 write: true,
             }
         });
+        this.subscribeStates("selectPrio");
+
+        /*
+        For every state in the system there has to be also an object of type state
+        Here a simple template for a boolean variable named "testVariable"
+        Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
+        */
+
 
         // In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-        this.subscribeStates("selectPrio");
+
         // You can also add a subscription for multiple states. The following line watches all states starting with "lights."
         // this.subscribeStates("lights.*");
         // Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
@@ -145,25 +141,25 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-     onMessage(obj) {
-         if (typeof obj === "object" && obj.message) {
+    onMessage(obj) {
+        if (typeof obj === "object") {
 
-             if (obj.command === "send") {
-                 // e.g. send email or pushover or whatever
-                 this.log.info("send command");
+            /* actions depend on command */
+            this.log.info("message received: " + obj.command);
 
-                 //Send response in callback if required
-                 if (obj.callback) {
-                     
-                     this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
-                 }
-             }             
-             
-             if (obj.command === "test") {
-                 this.log.info(obj.message.par1);
-             }
-         }
-     }
+            if (obj.command === "GetEffectList") {
+                /* share our effect list */
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
+                }
+            } else if (obj.command === "SanityCheck") {
+                /* make a sanity check on the given config */
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, ConfigSanityCheck(obj.message.par1), obj.callback);
+                }
+            }
+        }
+    }
 
     // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
     // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
@@ -243,11 +239,11 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
     ProcessStateMachine() {
-
+        /* actions depend on current state of the adapter */
         switch (this.currentState) {
-            case this.states.init: {
 
-                if (1) {
+            case this.states.init: {
+                if (this.ConfigSanityCheck(this.config) == true) {
                     /* create hyperion api obj and send initial commands to get some information from server */
                     this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info);
                     this.conn.ServerInfo();
@@ -255,18 +251,9 @@ class HyperionNgRemote extends utils.Adapter {
 
                     this.currentState = this.states.connecting;
                     this.log.info("init => connecting");
-
-                    //todo
-                    //var self = this;
-                    //sendTo(namespace, 'send', data, function(reply) {
-
-                    //    self.log.info("hier ist der callback");
-                    //});
-
                 }
                 else{
                     /* error with IP config, no connection to server possible */
-                    this.log.info("Error with IP config");
                     this.currentState = this.states.error;
                     this.log.info("init => error");
                 }
@@ -344,8 +331,21 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
+    ConfigSanityCheck(config) {
+
+        let configSane = true;
+
+        /* check if port is in allowed range */
+        if ( (config.serverPort < 0) || (config.serverPort > 65535) ) {
+            configSane = false;
+        }
+
+        return configSane;
+    }
+
+
     Clean() {
-        var configuredPrios = this.conn.GetServerInfoPriorities()
+        var configuredPrios = this.conn.GetPriorities()
         for (var prio of configuredPrios) {
             if ( prio.origin.includes(this.config.appname) ) {
                 /* this was set by us in an previous run, thus, get rid of it */
@@ -357,12 +357,20 @@ class HyperionNgRemote extends utils.Adapter {
 
 
     CreateDataPoints() {
-        //var effects = this.conn.GetEffects()
+
+
+        /*
+        let priorities = this.conn.GetPriorities();
+        for (priority of priorities) {
+            folderName = priority.priority.toString();
+            await this.setObjectNotExistsAsync(folderName+"componentId", {type: "state", common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+
+        }
+        */
     }
 
 
     WriteConfig() {
-
         /*
          * We need a little helper function to convert the color string (e.g. #12AB3F)
          * from the adapter config into an array of RGB values.
@@ -426,7 +434,7 @@ class HyperionApi
         this.serverinfo = data;
     }
 
-    GetServerInfoPriorities() {
+    GetPriorities() {
         return this.serverinfo.info.priorities;
     }
 
@@ -470,7 +478,7 @@ class HyperionApi
 
     GetEffectList() {
         var ret = new Array();
-        
+
         if (this.serverinfo) {
             for (var effect of this.serverinfo.info.effects) {
                 ret.push(effect.name);

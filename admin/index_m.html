@@ -1,307 +1,283 @@
 <html>
-
 <head>
 
-    <!-- Load ioBroker scripts and styles-->
-    <link rel="stylesheet" type="text/css" href="../../css/adapter.css"/>
-    <link rel="stylesheet" type="text/css" href="../../lib/css/materialize.css">
-    <link type="text/css" rel="stylesheet" href="../../lib/css/themes/jquery-ui/default/jquery-ui.min.css">
-    <link type="text/css" rel="stylesheet" href="../../lib/css/fancytree/ui.fancytree.min.css"/>
-    <link rel="stylesheet" type="text/css" href="../../lib/css/iob/selectID.css"/>
+<!-- Load ioBroker scripts and styles-->
+<link rel="stylesheet" type="text/css" href="../../css/adapter.css"/>
+<link rel="stylesheet" type="text/css" href="../../lib/css/materialize.css">
+<link type="text/css" rel="stylesheet" href="../../lib/css/themes/jquery-ui/default/jquery-ui.min.css">
+<link type="text/css" rel="stylesheet" href="../../lib/css/fancytree/ui.fancytree.min.css"/>
+<link rel="stylesheet" type="text/css" href="../../lib/css/iob/selectID.css"/>
 
-    <script type="text/javascript" src="../../lib/js/jquery-3.2.1.min.js"></script>
-    <script type="text/javascript" src="../../lib/js/jquery-ui-1.10.3.full.min.js"></script>
-    <script type="text/javascript" src="../../lib/js/jquery.fancytree-all.min.js"></script>
-    <script type="text/javascript" src="../../socket.io/socket.io.js"></script>
+<script type="text/javascript" src="../../lib/js/jquery-3.2.1.min.js"></script>
+<script type="text/javascript" src="../../lib/js/jquery-ui-1.10.3.full.min.js"></script>
+<script type="text/javascript" src="../../lib/js/jquery.fancytree-all.min.js"></script>
+<script type="text/javascript" src="../../socket.io/socket.io.js"></script>
 
-    <script type="text/javascript" src="../../js/translate.js"></script>
-    <script type="text/javascript" src="../../lib/js/selectID.js"></script>
-    <script type="text/javascript" src="../../lib/js/materialize.js"></script>
-    <script type="text/javascript" src="../../js/adapter-settings.js"></script>
+<script type="text/javascript" src="../../js/translate.js"></script>
+<script type="text/javascript" src="../../lib/js/selectID.js"></script>
+<script type="text/javascript" src="../../lib/js/materialize.js"></script>
+<script type="text/javascript" src="../../js/adapter-settings.js"></script>
 
-    <!-- Load our own files -->
-    <link rel="stylesheet" type="text/css" href="style.css" />
-    <script type="text/javascript" src="words.js"></script>
+<!-- Load our own files -->
+<link rel="stylesheet" type="text/css" href="style.css" />
+<script type="text/javascript" src="words.js"></script>
 
-    <script type="text/javascript">
+<script type="text/javascript">
 
 
-        var colors = [];
-        var effects = [];
+    var colorConfig = [];
+    var effectConfig = [];
 
-        // This will be called by the admin adapter when the settings page loads
-        function load(settings, onChange) {
-            // example: select elements with id=key and class=value and insert value
-            if (!settings) {
-                return;
+    /* load() is executed by admin adapter everytime the adapter config gui is loaded */
+    function load(settings, onChange) {
+
+        /* if no settings available, return because nothing to do */
+        if (!settings) {
+            return;
+        }
+
+        // example: select elements with id=key and class=value and insert value
+        $('.hng-config-value').each(function () {
+            var $key = $(this);
+            var id = $key.attr('id');
+            if ($key.attr('type') === 'checkbox') {
+                // do not call onChange direct, because onChange could expect some arguments
+                $key.prop('checked', settings[id])
+                    .on('change', () => onChange())
+                    ;
+            } else {
+                // do not call onChange direct, because onChange could expect some arguments
+                $key.val(settings[id])
+                    .on('change', () => onChange())
+                    .on('keyup', () => onChange())
+                    ;
             }
-            $('.value').each(function () {
-                var $key = $(this);
-                var id = $key.attr('id');
-                if ($key.attr('type') === 'checkbox') {
-                    // do not call onChange direct, because onChange could expect some arguments
-                    $key.prop('checked', settings[id])
-                        .on('change', () => onChange())
-                        ;
-                } else {
-                    // do not call onChange direct, because onChange could expect some arguments
-                    $key.val(settings[id])
-                        .on('change', () => onChange())
-                        .on('keyup', () => onChange())
-                        ;
-                }
-            });
+        });
 
-            colors = settings.colors || [];
-            effects = settings.effects || [];
+        colorConfig = settings.colors || [];
+        effectConfig = settings.effects || [];
 
-            onChange(false);
+        onChange(false);
 
-            values2table('colors', colors, onChange);
-            values2table('effects', effects, onChange);
+        values2table('table-colors', colorConfig, onChange);
+        values2table('table-effects', effectConfig, onChange);
 
-            // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
-            if (M) M.updateTextFields();
+        // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
+        if (M) M.updateTextFields();
+        
+        
+        var testVar = 0;
+        
+        $('.effectselect').each( function (index) {testVar = testVar + 1;});
+        
 
-
-    var elems = document.querySelectorAll('#effectselect');
-    //elems.append(' <option value="4">Option 4</option>');
-    
-    effectSelect = $('#effectselect');
-    
-    //effectSelect.append(' <option value="4">Option 4</option>');
-
-    var dest = adapter + "." + instance;
-    
-        sendTo(dest, 'send', {par1: effectSelect, par2: adapter, par3: adapter}, effectList => {        
+        effectSelect = $('.effectselect');
+        var dest = adapter + "." + instance;
+        sendTo(dest, 'GetEffectList', null, effectList => {
             for (var entry of effectList) {
                 effectSelect.append('<option>' + entry + '</option>');
             }
             effectSelect.select();
         });
+    }
 
 
-    //if (adapter.Test_Ui() == true)
-    //{
-    //    $('#effectselect').append(' <option value="4">Option 4</option>');
-    //}
+    /* load() is executed by admin adapter everytime the adapter config gui is loaded */
+    function save(callback) {
+        var adapterConfig = {};
 
+        /* all input values tagged as "hng-config-value" shall be written to our adapter config */
+        $('.hng-config-value').each(function () {
+            var $this = $(this);
 
+            /* actions depend on input type */
+            if ($this.attr('type') === 'checkbox') {
+                adapterConfig[$this.attr('id')] = $this.prop('checked');
+            } else {
+                adapterConfig[$this.attr('id')] = $this.val();
+            }
+        });
 
+        /* now add the tables to our config */
+        adapterConfig.colors = table2values('table-colors');
+        adapterConfig.effects = table2values('table-effects');
 
-    //var instances = M.FormSelect.init(elems, options);
-
-
-        }
-
-        // This will be called by the admin adapter when the user presses the save button
-        function save(callback) {
-            // example: select elements with class=value and build settings object
-            var obj = {};
-            $('.value').each(function () {
-                var $this = $(this);
-                if ($this.attr('type') === 'checkbox') {
-                    obj[$this.attr('id')] = $this.prop('checked');
-                } else {
-                    obj[$this.attr('id')] = $this.val();
-                }
-            });
-
-            obj.colors = table2values('colors');
-            obj.effects = table2values('effects');
-            callback(obj);
-        }
-        
-        
-    </script>
-
-
-
+        /* and finally, give the finished config object to the admin adapter */
+        callback(adapterConfig);
+    }
+</script>
 </head>
 
 <body>
 <div class="m adapter-container">
     <div class="row">
 
+        <!-- menu bar -->
         <div class="col s12">
             <ul class="tabs">
                 <li class="tab col s2"><a href="#tab-main"      class="translate active">Main settings</a></li>
-                <li class="tab col s2"><a href="#tab-components" class="translate">Components</a></li>
                 <li class="tab col s2"><a href="#tab-colors"    class="translate">Colors</a></li>
                 <li class="tab col s2"><a href="#tab-effects"    class="translate">Effects</a></li>
             </ul>
         </div>
 
+        <!-- tab-main, tab for basic adapter settings -->
         <div id="tab-main" class="col s12 page">
             <div class="row">
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="serverIp" />
+                    <input type="text" class="hng-config-value" id="serverIp" />
                     <label for="serverIp" class="translate">Server IP</label>
                 </div>
 
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="serverPort" />
+                    <input type="text" class="hng-config-value" id="serverPort" />
                     <label for="serverPort" class="translate">Port</label>
                 </div>
 
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="appname" />
+                    <input type="text" class="hng-config-value" id="appname" />
                     <label for="appname" class="translate">Name of this Hyperion client</label>
                 </div>
 
                 <div class="input-field col s12">
-                    <select class="value" id="effectselect">
+                    <select class="hng-config-value effectselect">
                         <option value="" disabled selected>Choose effect</option>
-                    </select>                    
+                    </select>
                 </div>
-                
-                    <table class="table-values">
-                        <thead>
-                            <tr>
-                                <th data-name="name" class="translate">Name</th>
-                                <th data-name="prio" class="translate">Priority</th>                                
-                                <th> effect</th>
-                                <th data-buttons="delete up down"></th>
-                            </tr>
-                        </thead>
-                        
-                        <tbody>
-                            <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
-                                        <option value="" disabled selected>Choose effect</option>
-                                    </select>
-                                </td>                            
-                            </tr>
-                            <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
-                                        <option value="" disabled selected>Choose effect</option>
-                                    </select>
-                                </td>                            
-                            </tr>
-                            <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
-                                        <option value="" disabled selected>Choose effect</option>
-                                    </select>
-                                </td>                            
-                            </tr>
-                        </tbody>
-                        
-                        
-                        
-                    </table>
-
-
-
+                <div class="input-field col s12">
+                    <select class="hng-config-value effectselect">
+                        <option value="" disabled selected>Choose effect</option>
+                    </select>
+                </div>
             </div>
         </div>
 
-        <div id="tab-components" class="col s12 page">
-        </div>
-
+        <!-- tab-colors, tab for adding new colors to configuration -->
         <div id="tab-colors" class="col s12 page">
-            <div class="col s12" id="colors">
+            <div class="col s12" id="table-colors">
                 <a class="btn-floating waves-effect waves-light blue table-button-add"><i class="material-icons">add</i></a>
                 <div class="table-values-div">
+
+                    <!-- table for configuring colors -->
                     <table class="table-values">
                         <thead>
                             <tr>
                                 <th data-name="name" data-type="text" class="translate">Name</th>
                                 <th data-name="prio" data-type="number" class="translate">Priority</th>
-                                <th data-name="color" data-type="color" class="translate">color</th>
+                                <th data-name="color" data-type="color" class="translate">Color</th>
                                 <th data-buttons="delete up down"></th>
                             </tr>
                         </thead>
+                        <!-- the table body is created by value2table() when clicking the "add" button -->
                     </table>
                 </div>
             </div>
         </div>
 
+        <!-- tab-effects, tab for adding new effects to configuration -->
         <div id="tab-effects" class="col s12 page">
-            <div class="col s12" id="effects">
-                <a class="btn-floating waves-effect waves-light blue table-button-add"><i class="material-icons">add</i></a>
+            <div class="col s12" id="table-effects">
                 <div class="table-values-div">
+
+                    <!-- table for configuring effects -->
                     <table class="table-values">
                         <thead>
                             <tr>
                                 <th data-name="name" class="translate">Name</th>
-                                <th data-name="prio" class="translate">Priority</th>                                
-                                <th> effect</th>
-                                <th data-buttons="delete up down"></th>
+                                <th data-name="prio" class="translate">Priority</th>
+                                <th data-name="effect">Effect</th>
                             </tr>
                         </thead>
-                        
+
+                        <!-- at the moment, the table body is hardcoded because dynamic creation with select fields is tricky -->
                         <tbody>
                             <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <!-- more options are added later via JS -->
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
-                                </td>                            
+                                </td>
                             </tr>
                             <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
-                                </td>                            
+                                </td>
                             </tr>
                             <tr>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <input class="values-input" type="text" data-index="0" data-name="name">
-                                </td>
-                                <td>
-                                    <select class="value" id="effectselect">
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
-                                </td>                            
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input class="values-input" type="text"></td>
+                                <td><input class="values-input" type="text"></td>
+                                <td><select class="hng-config-value effectselect">
+                                        <option value="" disabled selected>Choose effect</option>
+                                    </select>
+                                </td>
                             </tr>
                         </tbody>
-                        
-                        
-                        
                     </table>
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 </body>
-
 </html>
