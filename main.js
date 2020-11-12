@@ -392,7 +392,7 @@ class HyperionNgRemote extends utils.Adapter {
 
         /* then do the same again with the effects... */
         for(var effect of this.config.effects) {
-            this.conn.Effect( effect.name, Number(effect.prio), 0);
+            this.conn.Effect( effect.effect, Number(effect.prio), 0);
             this.configElementsRequested++;
         }
     }

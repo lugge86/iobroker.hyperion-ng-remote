@@ -65,12 +65,6 @@
         // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
         if (M) M.updateTextFields();
         
-        
-        var testVar = 0;
-        
-        $('.effectselect').each( function (index) {testVar = testVar + 1;});
-        
-
         effectSelect = $('.effectselect');
         var dest = adapter + "." + instance;
         sendTo(dest, 'GetEffectList', null, effectList => {
@@ -98,10 +92,29 @@
             }
         });
 
+        
+        
+        
+        
         /* now add the tables to our config */
         adapterConfig.colors = table2values('table-colors');
-        adapterConfig.effects = table2values('table-effects');
-
+        
+        tmpArr = [];        
+        $('.config-row').each( function (index) {
+            
+            newObj = {};            
+            $(this).find('td').each (function(index) {
+                if (index==0) newObj.name = $(this).find("input").val();
+                if (index==1) newObj.prio = $(this).find("input").val();
+                if (index==2) newObj.effect = $(this).find("select").val();
+            } );
+            
+            if (newObj.effect) {
+                tmpArr.push( newObj );
+                }
+        } );
+        adapterConfig.effects = tmpArr;
+        
         /* and finally, give the finished config object to the admin adapter */
         callback(adapterConfig);
     }
@@ -191,7 +204,7 @@
 
                         <!-- at the moment, the table body is hardcoded because dynamic creation with select fields is tricky -->
                         <tbody>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -200,7 +213,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -208,7 +221,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -216,7 +229,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -224,7 +237,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -232,7 +245,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -240,7 +253,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -248,7 +261,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -256,7 +269,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
@@ -264,7 +277,7 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
                                 <td><select class="hng-config-value effectselect">
