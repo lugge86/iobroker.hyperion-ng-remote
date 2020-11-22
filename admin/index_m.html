@@ -74,6 +74,8 @@
         values2table('table-colors', colorConfig, onChange);
         
         /* handle effect config with own logic */
+        timeout = setTimeout(function () {
+        
         let ctr = 0;
         $('.config-row').each( function () {
             if (effectConfig[ctr]) {
@@ -85,13 +87,47 @@
                     } else if (index2==1) {
                         $(this).find("input").val(thisEffect.prio);
                     } else if (index2==2) {
-                        $(this).find("select").val(thisEffect.effect);
-                        $(this).find("select").select();
+                        $(this).find("select").each(function () {
+                            //$(this).val( 5 );
+                            //$(this).find('option:eq(8)').prop('selected', true);
+                            //$(this).material_select();
+                            //$(this).select();
+                            //onChange();
+                            
+                            $(this).val("Collision").change(function () {
+                                onChange();
+                            }).keyup(function () {
+                                $(this).trigger('change');
+                            $(this).material_select();
+                            $(this).select();
+                            });
+                            /*
+                            if ($(this).text() == "Choose effect") {
+                                myParent = $(this).parent();
+                                myParent.removeAttr("selected");
+                            }
+                                
+                            if ($(this).text() == thisEffect.effect) {
+                                myParent = $(this).parent();
+                                myParent.attr("selected",true);
+                                
+                            }
+                            */
+                        } );
+                        
+                        
+                        
+                        
+                        //mySelect = $(this).find("select");
+                        
+                        
                     }
                 } );
             }
             ctr = ctr + 1;
         } );
+        
+        }, 1000);
 
         // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
         if (M) M.updateTextFields();
