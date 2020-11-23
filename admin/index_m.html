@@ -37,7 +37,7 @@
         }
 
         // example: select elements with id=key and class=value and insert value
-        $('.hng-config-value').each(function () {
+        $('.hng-config-value-simple').each(function () {
             var $key = $(this);
             var id = $key.attr('id');
             if ($key.attr('type') === 'checkbox') {
@@ -60,7 +60,7 @@
         onChange(false);
         
         
-        effectSelect = $('.effectselect');
+        effectSelect = $('.hng-config-value-effectselect');
         var dest = adapter + "." + instance;
         sendTo(dest, 'GetEffectList', null, effectList => {
             for (var entry of effectList) {
@@ -88,35 +88,11 @@
                         $(this).find("input").val(thisEffect.prio);
                     } else if (index2==2) {
                         $(this).find("select").each(function () {
-                            //$(this).val( 5 );
-                            //$(this).find('option:eq(8)').prop('selected', true);
-                            //$(this).material_select();
-                            //$(this).select();
-                            //onChange();
-                            
-                            $(this).val("Collision").change(function () {
-                                onChange();
-                            }).keyup(function () {
-                                $(this).trigger('change');
-                            $(this).material_select();
+                            $(this).val( thisEffect.effect );
                             $(this).select();
-                            });
-                            /*
-                            if ($(this).text() == "Choose effect") {
-                                myParent = $(this).parent();
-                                myParent.removeAttr("selected");
-                            }
-                                
-                            if ($(this).text() == thisEffect.effect) {
-                                myParent = $(this).parent();
-                                myParent.attr("selected",true);
-                                
-                            }
-                            */
+                            
+
                         } );
-                        
-                        
-                        
                         
                         //mySelect = $(this).find("select");
                         
@@ -127,7 +103,7 @@
             ctr = ctr + 1;
         } );
         
-        }, 1000);
+        }, 1000); 
 
         // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
         if (M) M.updateTextFields();
@@ -141,8 +117,8 @@
     function save(callback) {
         var adapterConfig = {};
 
-        /* all input values tagged as "hng-config-value" shall be written to our adapter config */
-        $('.hng-config-value').each(function () {
+        /* all input values tagged as "hng-config-value-simple" shall be written to our adapter config */
+        $('.hng-config-value-simple').each(function () {
             var $this = $(this);
 
             /* actions depend on input type */
@@ -199,29 +175,18 @@
         <div id="tab-main" class="col s12 page">
             <div class="row">
                 <div class="col s6 input-field">
-                    <input type="text" class="hng-config-value" id="serverIp" />
+                    <input type="text" class="hng-config-value-simple" id="serverIp" />
                     <label for="serverIp" class="translate">Server IP</label>
                 </div>
 
                 <div class="col s6 input-field">
-                    <input type="text" class="hng-config-value" id="serverPort" />
+                    <input type="text" class="hng-config-value-simple" id="serverPort" />
                     <label for="serverPort" class="translate">Port</label>
                 </div>
 
                 <div class="col s6 input-field">
-                    <input type="text" class="hng-config-value" id="appname" />
+                    <input type="text" class="hng-config-value-simple" id="appname" />
                     <label for="appname" class="translate">Name of this Hyperion client</label>
-                </div>
-
-                <div class="input-field col s12">
-                    <select class="hng-config-value effectselect">
-                        <option value="" disabled selected>Choose effect</option>
-                    </select>
-                </div>
-                <div class="input-field col s12">
-                    <select class="hng-config-value effectselect">
-                        <option value="" disabled selected>Choose effect</option>
-                    </select>
                 </div>
             </div>
         </div>
@@ -268,7 +233,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <!-- more options are added later via JS -->
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
@@ -277,7 +242,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -285,7 +250,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -293,7 +258,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -301,7 +266,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -309,7 +274,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -317,7 +282,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -325,7 +290,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -333,7 +298,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
@@ -341,7 +306,7 @@
                             <tr class="config-row">
                                 <td><input class="values-input" type="text"></td>
                                 <td><input class="values-input" type="text"></td>
-                                <td><select class="hng-config-value effectselect">
+                                <td><select class="hng-config-value-effectselect">
                                         <option value="" disabled selected>Choose effect</option>
                                     </select>
                                 </td>
