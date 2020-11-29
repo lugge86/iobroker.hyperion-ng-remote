@@ -69,18 +69,7 @@ class HyperionNgRemote extends utils.Adapter {
         this.log.info("config User IP: " + this.config.serverIp);
         this.log.info("config Port: " + this.config.serverPort);
         
-        //todo: move this
-        await this.setObjectNotExistsAsync("selectPrio", {
-            type: "state",
-            common: {
-                name: "select active priority",
-                type: "number",
-                role: "state",
-                read: true,
-                write: true,
-            }
-        });
-        this.subscribeStates("selectPrio");
+
 
         /*
         For every state in the system there has to be also an object of type state
@@ -188,7 +177,7 @@ class HyperionNgRemote extends utils.Adapter {
             if (state) {
 
                 switch(id){
-                    case "hyperion-ng-remote.0.selectPrio": {
+                    case "hyperion-ng-remote.0.activePriority": {
                         this.conn.SourceSelection(state.val);
                         break;
                     }
@@ -205,17 +194,18 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    NotifyCallback(command, error)
-    {
+    NotifyCallback(command, error) {
         if (error) {
         } else {
             switch(command) {
                 case "serverinfo": {
                     this.serverinfoFinished = true;
+                    this.UpdateDatapointsPriority();
                     break;
                 }
                 case "sysinfo": {
                     this.sysinfoFinished = true;
+                    //this.UpdateDatapointsSysinfo();
                     break;
                 }
                 case "color": {
@@ -241,8 +231,49 @@ class HyperionNgRemote extends utils.Adapter {
 
         this.ProcessStateMachine();
     }
+    
+        
+    UpdateDatapointsPriority() {
+        var availablePriorities = this.conn.GetPriorities();
+        for (var priority of availablePriorities) {
+            var folderName = priority.priority.toString();
+            
+            this.setState(folderName+".componentId", priority.componentId, true);
+            this.setState(folderName+".origin", priority.origin, true);
+            this.setState(folderName+".priority", priority.priority, true);
+            this.setState(folderName+".owner", priority.owner, true);
+            this.setState(folderName+".active", priority.active, true);
+        }   
+    }
+    
+    
+    UpdateDatapointsSysinfo() {
+        
+        var sysinfo = this.conn.GetSysInfo();
+        
+        if (!sysinfo)
+        {
+            this.log.info("error");
+        }
+        
+        this.setState("SystemInfo.Hyperion.build", sysinfo.info.hyperion.build, true);
+        this.setState("SystemInfo.Hyperion.gitremote", sysinfo.info.hyperion.gitremote, true);
+        this.setState("SystemInfo.Hyperion.time", sysinfo.info.hyperion.time, true);
+        this.setState("SystemInfo.Hyperion.version", sysinfo.info.hyperion.version, true);
+        this.setState("SystemInfo.Hyperion.id", sysinfo.info.hyperion.id, true);
+        
+        this.setState("SystemInfo.System.architecture", sysinfo.info.system.architecture, true);
+        this.setState("SystemInfo.System.hostName", sysinfo.info.system.hostName, true);
+        this.setState("SystemInfo.System.kernelType", sysinfo.info.system.kernelType, true);
+        this.setState("SystemInfo.System.kernelVersion", sysinfo.info.system.kernelVersion, true);
+        this.setState("SystemInfo.System.prettyName", sysinfo.info.system.prettyName, true);
+        this.setState("SystemInfo.System.productType", sysinfo.info.system.productType, true);
+        this.setState("SystemInfo.System.productVersion", sysinfo.info.system.productVersion, true);
+        this.setState("SystemInfo.System.wordSize", sysinfo.info.system.wordSize, true);
+    }
+    
 
-    ProcessStateMachine() {
+    async ProcessStateMachine() {
         /* actions depend on current state of the adapter */
         switch (this.currentState) {
 
@@ -360,17 +391,42 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    CreateDataPoints() {
+    async CreateDataPoints() {
 
+        /* data point for directly setting the active priority */
+        await this.setObjectNotExistsAsync("activePriority", {type: "state", common: {name: "select active priority", type: "number", role: "state", read: true, write: true } });
+        this.subscribeStates("activePriority");
 
-        /*
-        let priorities = this.conn.GetPriorities();
-        for (priority of priorities) {
-            folderName = priority.priority.toString();
-            await this.setObjectNotExistsAsync(folderName+"componentId", {type: "state", common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
-
+        /* create data points for each configured prio, register only the active-trigger */
+        var availablePriorities = this.conn.GetPriorities();
+        for (var priority of availablePriorities) {
+            var folderName = priority.priority.toString();
+            await this.setObjectNotExistsAsync(folderName+".componentId",   {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+            await this.setObjectNotExistsAsync(folderName+".origin",        {type: "state",   common: {name: "Origin of this priority", type: "string", role: "state", read: true, write: false} });
+            await this.setObjectNotExistsAsync(folderName+".priority",      {type: "state",   common: {name: "priority of this priority", type: "number", role: "state", read: true, write: false} });
+            await this.setObjectNotExistsAsync(folderName+".owner",         {type: "state",   common: {name: "owner of this priority", type: "string", role: "state", read: true, write: false} });
+            await this.setObjectNotExistsAsync(folderName+".active",        {type: "state",   common: {name: "set priority active", type: "boolean", role: "state", read: true, write: true} });
+            this.subscribeStates(folderName+".active");            
         }
-        */
+        this.UpdateDatapointsPriority();
+        
+        
+        
+        var sysinfo = this.conn.GetSysInfo();
+        await this.setObjectNotExistsAsync("SystemInfo.Hyperion.build",     {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.Hyperion.gitremote", {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.Hyperion.time",      {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.Hyperion.version",   {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.Hyperion.id",        {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });        
+        await this.setObjectNotExistsAsync("SystemInfo.System.architecture",{type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.hostName",    {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.kernelType",  {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.kernelVersion",{type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.prettyName",  {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.productType", {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.productVersion",{type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        await this.setObjectNotExistsAsync("SystemInfo.System.wordSize",    {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
+        this.UpdateDatapointsSysinfo();
     }
 
 

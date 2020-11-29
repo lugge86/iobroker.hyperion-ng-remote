@@ -61,6 +61,15 @@
         
         
         effectSelect = $('.hng-config-value-effectselect');
+        
+        effectSelect.on("change", function() {
+            onChange();
+        });
+        
+        $(".values-input").on("change", function() {
+            onChange();
+        });
+        
         var dest = adapter + "." + instance;
         sendTo(dest, 'GetEffectList', null, effectList => {
             for (var entry of effectList) {
@@ -107,10 +116,11 @@
 
         // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
         if (M) M.updateTextFields();
-        
-
 
     }
+    
+    
+    
 
 
     /* load() is executed by admin adapter everytime the adapter config gui is loaded */
