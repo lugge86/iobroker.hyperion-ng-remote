@@ -164,18 +164,49 @@
         adapterConfig.effects = tmpArr;
         
         
-        sendTo(adapter + "." + instance, 'ConfigSanityCheck', adapterConfig, result => {
+        sendTo(adapter + "." + instance, 'ConfigSanityCheck', adapterConfig, isSane => {
+            if (isSane) {
+                /* and finally, give the finished config object to the admin adapter */
+                callback(adapterConfig);
+            } else {
+                $('#dialog_info').modal({
+                    startingTop: '4%',
+                    endingTop: '10%',
+                    dismissible: false
+                });
 
+                $('#dialog_info').modal('open');
+                Materialize.updateTextFields();
+            }
         });
         
-        /* and finally, give the finished config object to the admin adapter */
-        callback(adapterConfig);
+        
+        
     }
 </script>
 </head>
 
 <body>
 <div class="m adapter-container">
+
+    <div class="materialize-dialogs m">
+        <div id="dialog_info" class="modal modal-fixed-footer">
+            <div class="modal-content">
+                <h3>Error!</h3>
+                <!--
+                <div class="row textarea">
+                    <textarea id="stdout" disabled="disabled" cols="120" rows="30" style="height: calc(100% - 115px)"></textarea>
+                </div>
+                -->
+            </div>
+            <div class="modal-footer">
+                <!-- <a name="stop" href="#!" class="modal-action modal-close waves-effect waves-red btn-flat left">Stop</a> -->
+                <a name="hide" href="#!" class="modal-action modal-close waves-effect waves-green btn green translate">Hide</a>
+            </div>
+        </div>
+    </div>
+
+
     <div class="row">
 
         <!-- menu bar -->
