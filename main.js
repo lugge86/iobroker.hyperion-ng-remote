@@ -16,15 +16,6 @@ const schedule = require('node-schedule');
 
 class HyperionNgRemote extends utils.Adapter {
 
-    sysinfoFinished = false;
-    serverinfoFinished = false;
-
-    configElementsRequested = 0;
-    configElementsConfirmed = 0;
-
-    deleteionRequested = 0;
-    deleteionConfirmed = 0;
-
     cycleTimer = null;
     currentState = null;
 
@@ -34,7 +25,9 @@ class HyperionNgRemote extends utils.Adapter {
         cleaning: 3,
         configuring: 4,
         ready: 5,
-        error: 6
+        error: 6,
+        recovering: 7,
+        waiting: 8
     };
 
     /**
@@ -52,6 +45,15 @@ class HyperionNgRemote extends utils.Adapter {
         this.on("unload", this.onUnload.bind(this));
 
         this.currentState = this.states.init;
+        
+        this.responseError = false;
+        this.sysinfoFinished = false;
+        this.serverinfoFinished = false;
+        this.configElementsRequested = 0;
+        this.configElementsConfirmed = 0;
+        this.deleteionRequested = 0;
+        this.deleteionConfirmed = 0;
+        this.recoveryFinished = false;
     }
 
 
@@ -196,6 +198,10 @@ class HyperionNgRemote extends utils.Adapter {
 
     NotifyCallback(command, error) {
         if (error) {
+            if (error == "timeout") {
+                this.log.info("timeout!!");
+            }
+            this.responseError = true;
         } else {
             switch(command) {
                 case "serverinfo": {
@@ -278,19 +284,19 @@ class HyperionNgRemote extends utils.Adapter {
         switch (this.currentState) {
 
             case this.states.init: {
-                if (this.ConfigSanityCheck(this.config) == true) {
+                if (this.ConfigSanityCheck(this.config) == false) {
+                    /* error with config, no connection to server possible */
+                    this.currentState = this.states.error;
+                    this.log.info("config error; please check your adapter configuration");
+                    this.log.info("init => error");                    
+                } else {
                     /* create hyperion api obj and send initial commands to get some information from server */
-                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info);
+                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 30000);
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
 
                     this.currentState = this.states.connecting;
                     this.log.info("init => connecting");
-                }
-                else{
-                    /* error with IP config, no connection to server possible */
-                    this.currentState = this.states.error;
-                    this.log.info("init => error");
                 }
 
                 break;
@@ -303,10 +309,14 @@ class HyperionNgRemote extends utils.Adapter {
                  */
                 if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
                     /* start cleaning the server from old configuration data */
-                    this.Clean();
+                    this.DeletePriorities();
 
                     this.currentState = this.states.cleaning;
                     this.log.info("connecting => cleaning");
+                    
+                } else if (this.responseError == true) {
+                    this.currentState = this.states.recovering;
+                    this.log.info("connecting => recovering");
                 }
 
                 break;
@@ -320,7 +330,12 @@ class HyperionNgRemote extends utils.Adapter {
 
                     this.currentState = this.states.configuring;
                     this.log.info("cleaning => configuring");
+                    
+                } else if (this.responseError == true) {
+                    this.currentState = this.states.recovering;
+                    this.log.info("cleaning => recovering");
                 }
+                
 
                 break;
             }
@@ -338,10 +353,10 @@ class HyperionNgRemote extends utils.Adapter {
 
                     this.currentState = this.states.ready;
                     this.log.info("configuring => ready");
-
-                    //todo:
-                    this.effList = this.conn.GetEffects();
-                    this.cmpList = this.conn.GetComponentList();
+                    
+                } else if (this.responseError == true) {
+                    this.currentState = this.states.recovering;
+                    this.log.info("configuring => recovering");
                 }
 
                 break;
@@ -349,6 +364,42 @@ class HyperionNgRemote extends utils.Adapter {
 
             case this.states.ready: {
                 /* nothing to do here, this is the normal operation mode */
+                if (this.responseError == true) {
+                    this.currentState = this.states.recovering;
+                    this.log.info("ready => recovering");
+                }
+                break;
+            }
+            
+            case this.states.recovering: {
+                
+                /* reset all flags */
+                this.setState("info.connection", false, true);
+                this.responseError = false;
+                this.sysinfoFinished = false;
+                this.serverinfoFinished = false;
+                this.configElementsRequested = 0;
+                this.configElementsConfirmed = 0;
+                this.deleteionRequested = 0;
+                this.deleteionConfirmed = 0;
+                this.recoveryFinished = false;
+                
+                setTimeout( () => {
+                    this.recoveryFinished  = true;
+                }, 30000);
+
+                this.currentState = this.states.waiting;
+                this.log.info("recovering => waiting");
+                break;
+            }
+
+            case this.states.waiting: {
+                
+                if (this.recoveryFinished == true) {
+                    this.recoveryFinished = false;                                    
+                    this.currentState = this.states.init;
+                    this.log.info("waiting => init");
+                }
                 break;
             }
 
@@ -396,7 +447,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    Clean() {
+    DeletePriorities() {
         var configuredPrios = this.conn.GetPriorities()
         for (var prio of configuredPrios) {
             if ( prio.origin.includes(this.config.appname) ) {
@@ -406,7 +457,11 @@ class HyperionNgRemote extends utils.Adapter {
             }
         }
     }
-
+    
+    
+    ReInit() {
+    }
+    
 
     async CreateDataPoints() {
 
@@ -483,11 +538,12 @@ class HyperionApi
     sysinfo = null;
     serverinfo = null;
 
-    constructor(ip, port, origin, notifyClbk, logger) {
+    constructor(ip, port, origin, notifyClbk, logger, timeout) {
         this.origin = origin;
         this.callback = notifyClbk;
         this.logger = logger;
         this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";
+        this.timeout = timeout;
     }
 
     SourceSelection(prio) {
@@ -631,16 +687,19 @@ class HyperionApi
          * Now make the actual request.
          * The result will later be available in the request callback.
          */
-        var self = this;
+        
         this.logger("sending request: " + requestJson.command);
         
         
-        //timeout = setTimeout(sayHi, 1000, "Hello", "John"); // Hello, John
+        var timeout = setTimeout(this.HandleTimeout.bind(this), this.timeout, requestJson.command); // Hello, John
         
-        
+        var self = this;
         request.post(requestOptions,
             function(error, response, body) {
 
+                /* first, clear the timeout because we have some kind of response from server */
+                clearTimeout(timeout);
+                
                 var retError = null;
                 var retCommand = requestJson.command;
 
@@ -686,6 +745,14 @@ class HyperionApi
             }
         );
     }
+    
+    
+    HandleTimeout(command) {
+        this.logger("timeout!");
+        this.callback(command, "timeout");
+    }
+    
+    
 
 }
 
