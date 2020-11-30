@@ -63,6 +63,8 @@
         
         effectSelect = $('.hng-config-value-effectselect');
         
+        
+        
         effectSelect.on("change", function() {
             onChange();
         });
@@ -74,10 +76,14 @@
         
         sendTo(adapter + "." + instance, 'GetEffectList', null, effectList => {
             for (var entry of effectList) {
-                effectSelect.append('<option>' + entry + '</option>');
+                Select_AddOption( effectSelect, entry);
             }
-            effectSelect.select();
+
+            
+            var myOptions = effectSelect[0].options;
         });
+        
+        
 
         
         /* the color config can easily be handled with values2table() */
@@ -98,6 +104,7 @@
                         $(this).find("input").val(thisEffect.prio);
                     } else if (index2==2) {
                         $(this).find("select").each(function () {
+                            Select_AddOption( $(this), thisEffect.effect);
                             $(this).val( thisEffect.effect );
                             $(this).select();
                             
@@ -118,6 +125,11 @@
         // reinitialize all the Materialize labels on the page if you are dynamically adding inputs:
         if (M) M.updateTextFields();
 
+    }
+    
+    function Select_AddOption(select, option) {        
+        select.append('<option>' + option + '</option>');
+        select.select();
     }
     
     
@@ -157,7 +169,7 @@
                 if (index==2) newObj.effect = $(this).find("select").val();
             } );
             
-            if (newObj.effect) {
+            if ( (newObj.name) && (newObj.prio) && (newObj.effect) ){
                 tmpArr.push( newObj );
                 }
         } );
