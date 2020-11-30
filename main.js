@@ -141,10 +141,10 @@ class HyperionNgRemote extends utils.Adapter {
                 if (obj.callback) {
                     this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
                 }
-            } else if (obj.command === "SanityCheck") {
+            } else if (obj.command === "ConfigSanityCheck") {
                 /* make a sanity check on the given config */
                 if (obj.callback) {
-                    this.sendTo(obj.from, obj.command, ConfigSanityCheck(obj.message.par1), obj.callback);
+                    this.sendTo(obj.from, obj.command, this.ConfigSanityCheck(obj.message), obj.callback);
                 }
             }
         }
@@ -368,12 +368,29 @@ class HyperionNgRemote extends utils.Adapter {
 
     ConfigSanityCheck(config) {
 
-        let configSane = true;
+        var configSane = true;
 
         /* check if port is in allowed range */
         if ( (config.serverPort < 0) || (config.serverPort > 65535) ) {
             configSane = false;
         }
+        
+        {
+            var prioArray = new Array();
+            for (var color of config.colors) {
+                prioArray.push(color.prio);
+            }
+            for (var effect of config.effects) {
+                prioArray.push(effect.prio);
+            }
+            var size1 = new Set(prioArray).size;
+            var size2 = prioArray.length;
+            if (size1 != size2) {
+                configSane = false;
+            }
+            //new Set(array)).size !== array.length;
+        }
+        
 
         return configSane;
     }
@@ -616,6 +633,11 @@ class HyperionApi
          */
         var self = this;
         this.logger("sending request: " + requestJson.command);
+        
+        
+        //timeout = setTimeout(sayHi, 1000, "Hello", "John"); // Hello, John
+        
+        
         request.post(requestOptions,
             function(error, response, body) {
 

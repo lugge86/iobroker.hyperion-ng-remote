@@ -27,6 +27,7 @@
 
     var colorConfig = [];
     var effectConfig = [];
+    var backend = adapter + "." + instance;
 
     /* load() is executed by admin adapter everytime the adapter config gui is loaded */
     function load(settings, onChange) {
@@ -70,8 +71,8 @@
             onChange();
         });
         
-        var dest = adapter + "." + instance;
-        sendTo(dest, 'GetEffectList', null, effectList => {
+        
+        sendTo(adapter + "." + instance, 'GetEffectList', null, effectList => {
             for (var entry of effectList) {
                 effectSelect.append('<option>' + entry + '</option>');
             }
@@ -161,6 +162,11 @@
                 }
         } );
         adapterConfig.effects = tmpArr;
+        
+        
+        sendTo(adapter + "." + instance, 'ConfigSanityCheck', adapterConfig, result => {
+
+        });
         
         /* and finally, give the finished config object to the admin adapter */
         callback(adapterConfig);
