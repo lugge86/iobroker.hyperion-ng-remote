@@ -242,13 +242,14 @@ class HyperionNgRemote extends utils.Adapter {
     UpdateDatapointsPriority() {
         var availablePriorities = this.conn.GetPriorities();
         for (var priority of availablePriorities) {
-            var folderName = priority.priority.toString();
+            var folderName = "Priorities."+this.PrioToName(priority.priority);
             
             this.setState(folderName+".componentId", priority.componentId, true);
             this.setState(folderName+".origin", priority.origin, true);
             this.setState(folderName+".priority", priority.priority, true);
             this.setState(folderName+".owner", priority.owner, true);
             this.setState(folderName+".active", priority.active, true);
+            this.setState(folderName+".visible", priority.visible, true);
         }   
     }
     
@@ -434,16 +435,36 @@ class HyperionNgRemote extends utils.Adapter {
             for (var effect of config.effects) {
                 prioArray.push(effect.prio);
             }
-            var size1 = new Set(prioArray).size;
-            var size2 = prioArray.length;
-            if (size1 != size2) {
+            if (new Set(prioArray).size != prioArray.length) {
                 configSane = false;
             }
-            //new Set(array)).size !== array.length;
-        }
-        
+        }        
 
         return configSane;
+    }
+    
+    
+    PrioToName(prio) {        
+        /* Todo: a map would be better here */
+        var name = null;        
+        for (var color of this.config.colors) {
+            if (color.prio == prio) {
+                name = color.name;
+                break;
+            }
+        }        
+        if (name == null) {
+            for (var effect of this.config.effects) {
+                if (effect.prio == prio) {
+                    name = effect.name;
+                    break;
+                }        
+            }
+        }        
+        if (name == null) {
+            name = prio.toString();
+        }        
+        return name;
     }
 
 
@@ -472,12 +493,15 @@ class HyperionNgRemote extends utils.Adapter {
         /* create data points for each configured prio, register only the active-trigger */
         var availablePriorities = this.conn.GetPriorities();
         for (var priority of availablePriorities) {
-            var folderName = priority.priority.toString();
+            
+            var folderName = "Priorities."+this.PrioToName(priority.priority);            
+            
             await this.setObjectNotExistsAsync(folderName+".componentId",   {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
             await this.setObjectNotExistsAsync(folderName+".origin",        {type: "state",   common: {name: "Origin of this priority", type: "string", role: "state", read: true, write: false} });
             await this.setObjectNotExistsAsync(folderName+".priority",      {type: "state",   common: {name: "priority of this priority", type: "number", role: "state", read: true, write: false} });
             await this.setObjectNotExistsAsync(folderName+".owner",         {type: "state",   common: {name: "owner of this priority", type: "string", role: "state", read: true, write: false} });
-            await this.setObjectNotExistsAsync(folderName+".active",        {type: "state",   common: {name: "set priority active", type: "boolean", role: "state", read: true, write: true} });
+            await this.setObjectNotExistsAsync(folderName+".active",        {type: "state",   common: {name: "prioritiy is active for selection", type: "boolean", role: "state", read: true, write: false} });
+            await this.setObjectNotExistsAsync(folderName+".visible",        {type: "state",   common: {name: "set priority visible", type: "boolean", role: "state", read: true, write: true} });
             this.subscribeStates(folderName+".active");            
         }
         this.UpdateDatapointsPriority();
