@@ -24,7 +24,7 @@ class HyperionNgRemote extends utils.Adapter {
         connecting: 2,
         cleaning: 3,
         configuring: 4,
-        ready: 5,
+        running: 5,
         error: 6,
         recovering: 7,
         waiting: 8
@@ -54,6 +54,7 @@ class HyperionNgRemote extends utils.Adapter {
         this.deleteionRequested = 0;
         this.deleteionConfirmed = 0;
         this.recoveryFinished = false;
+        this.serverInfoTimer = null;
     }
 
 
@@ -174,23 +175,33 @@ class HyperionNgRemote extends utils.Adapter {
      * @param {string} id
      * @param {ioBroker.State | null | undefined} state
      */
-    onStateChange(id, state) {
-        if (this.currentState == this.states.ready) {
+    async onStateChange(id, state) {
+        if (this.currentState == this.states.running) {
             
             if (state) {
                 
                 if (state.ack == false) {
                     switch( this.IdWithoutPath(id) ){
                         case "trigger": {
+                            /* set new priority according to user's wish */
                             this.conn.SourceSelection(state.val);
                             break;
                         }
                         case "triggerByName": {
+                            /* before we can set the new priority, we have to map the name to a prio number */
                             this.conn.SourceSelection( this.NameToPrio(state.val) );
                             break;
                         }
                         case "visible": {
-                            var test = this.PathFromId(id);
+                            /* first we have to get the priority of which the visibility shall be changed */
+                            var prio = await this.getStateAsync( this.PathFromId(id) + ".priority" );
+                            if (state.val == true) {
+                                /* user wants to set priority visible, thus, just execute a SourceSelection */
+                                this.conn.SourceSelection(prio);
+                            } else {
+                                /* setting to false is not supported at the moment, this would mean no prio is active */
+                            }
+                            
                             break;
                         }
                         default: {
@@ -216,24 +227,36 @@ class HyperionNgRemote extends utils.Adapter {
         } else {
             switch(command) {
                 case "serverinfo": {
+                    /* remember success for later use */
                     this.serverinfoFinished = true;
+                    
+                    /* everytime we receive a ServerInfo, we can update all our data points */
                     this.UpdateDatapointsPriority();
                     break;
                 }
                 case "sysinfo": {
+                    /* remember success for later use */
                     this.sysinfoFinished = true;
-                    //this.UpdateDatapointsSysinfo();
                     break;
                 }
                 case "color": {
+                    /* we have to count the responses in order to know when configuration is complete */
                     this.configElementsConfirmed++;
                     break;
                 }
                 case "effect": {
+                    /* we have to count the responses in order to know when configuration is complete */
                     this.configElementsConfirmed++;
                     break;
                 }
                 case "sourceselect": {
+                    /*
+                     * If a SourceSelect was successful during running state,
+                     * we just execute a ServerInfo afterwards.
+                     * This is necessary in order to update all the data points */
+                    if (this.currentState == this.states.running) {                        
+                        setTimeout( () => { this.conn.ServerInfo(); }, 1400);
+                    }
                     break;
                 }
                 case "clear": {
@@ -271,6 +294,7 @@ class HyperionNgRemote extends utils.Adapter {
         
         this.setState("trigger", activePriority, true);
         this.setState("triggerByName", this.PrioToName(activePriority), true);
+        this.log.info("active: "+activePriority);
         
         
     }
@@ -341,14 +365,13 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.recovering;
                     this.log.info("connecting => recovering");
                 }
-
                 break;
             }
 
             case this.states.cleaning: {
 
                 if( this.deleteionRequested == this.deleteionConfirmed ) {
-                    /* now write our color and effect configuration to hyperion */
+                    /* all old config is deleted, now write our new configuration to hyperion */
                     this.WriteConfig();
 
                     this.currentState = this.states.configuring;
@@ -358,8 +381,6 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.recovering;
                     this.log.info("cleaning => recovering");
                 }
-                
-
                 break;
             }
 
@@ -368,31 +389,36 @@ class HyperionNgRemote extends utils.Adapter {
                  * Here we wait till all configuration jobs have been
                  * confirmed by hyperion server.
                  */
-
                 if ( this.configElementsRequested == this.configElementsConfirmed ) {
-                    /* all went well, create DPs and set adapter info to "connected" */
+                    /*
+                     * Now that all configuration went well, we can set up a few things:
+                     * - create all the data points
+                     * - set info state, this will make the admin adapter show our instance as "connected"
+                     * - set a schedule so that we get a cyclic ServerInfo to keep track of changes on server side
+                     */
                     this.CreateDataPoints();
                     this.setState("info.connection", true, true);
-                    
-                    this.serverInfoTimer = schedule.scheduleJob("*/10 * * * * *", this.helperFunction.bind(this) );
+                    //this.serverInfoTimer = schedule.scheduleJob("*/30 * * * * *", () => {this.conn.ServerInfo();} );
 
-                    this.currentState = this.states.ready;
+                    
+                    this.currentState = this.states.running;
                     this.log.info("configuring => ready");
                     
                 } else if (this.responseError == true) {
                     this.currentState = this.states.recovering;
                     this.log.info("configuring => recovering");
                 }
-
                 break;
             }
 
-            case this.states.ready: {
+            case this.states.running: {
                 
                 if (this.responseError == true) {
                     
                     /* stop asking for serverinfos */
-                    this.serverInfoTimer.cancel();
+                    if (this.serverInfoTimer) {
+                        this.serverInfoTimer.cancel();
+                    }
                     
                     this.currentState = this.states.recovering;
                     this.log.info("ready => recovering");
@@ -412,6 +438,7 @@ class HyperionNgRemote extends utils.Adapter {
                 this.deleteionRequested = 0;
                 this.deleteionConfirmed = 0;
                 this.recoveryFinished = false;
+                this.serverInfoTimer = null;
                 
                 setTimeout( () => {
                     this.recoveryFinished  = true;
@@ -445,9 +472,6 @@ class HyperionNgRemote extends utils.Adapter {
         }
     }
 
-    helperFunction() {
-        this.conn.ServerInfo();
-    }
 
     ConfigSanityCheck(config) {
 
@@ -817,6 +841,18 @@ class HyperionApi
                         switch(responseJson.command) {
 
                             case "serverinfo": {
+                                
+                                var active = 0;
+                                
+                                for (var prio of responseJson.info.priorities) {
+                                    if (prio.visible == true) {
+                                        active = prio.priority;
+                                        break;
+                                    }
+                                }
+                                
+                                
+                                self.logger("active2: "+active);
                                 self.ServerInfoClbk(responseJson);
                                 break;
                             }
