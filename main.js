@@ -10,8 +10,6 @@ const utils = require("@iobroker/adapter-core");
 const request = require('request');
 const schedule = require('node-schedule');
 
-// Load your modules here, e.g.:
-// const fs = require("fs");
 
 
 class HyperionNgRemote extends utils.Adapter {
@@ -30,9 +28,7 @@ class HyperionNgRemote extends utils.Adapter {
         waiting: 8
     };
 
-    /**
-     * @param {Partial<utils.AdapterOptions>} [options={}]
-     */
+
     constructor(options) {
         super({
             ...options,
@@ -58,73 +54,17 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    /**
-     * Is called when databases are connected and adapter received configuration.
-     */
     async onReady() {
-        // Initialize your adapter here
 
-        // Reset the connection indicator during startup
         this.setState("info.connection", false, true);
-
-        // The adapters config (in the instance object everything under the attribute "native") is accessible via
-        // this.config:
-        this.log.info("config User IP: " + this.config.serverIp);
-        this.log.info("config Port: " + this.config.serverPort);
-        
-
-
-        /*
-        For every state in the system there has to be also an object of type state
-        Here a simple template for a boolean variable named "testVariable"
-        Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-        */
-
-
-        // In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-
-        // You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-        // this.subscribeStates("lights.*");
-        // Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-        // this.subscribeStates("*");
-
-        /*
-            setState examples
-            you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-        */
-        // the variable testVariable is set to true as command (ack=false)
-        //await this.setStateAsync("testVariable", true);
-
-        // same thing, but the value is flagged "ack"
-        // ack should be always set to true if the value is received from or acknowledged from the target system
-        //await this.setStateAsync("testVariable", { val: true, ack: true });
-
-        // same thing, but the state is deleted after 30s (getState will return null afterwards)
-        //await this.setStateAsync("testVariable", { val: true, ack: true, expire: 30 });
-
-        // examples for the checkPassword/checkGroup functions
-        //let result = await this.checkPasswordAsync("admin", "iobroker");
-        //this.log.info("check user admin pw iobroker: " + result);
-
-        //result = await this.checkGroupAsync("admin", "admin");
-        //this.log.info("check group user admin group admin: " + result);
-
 
         this.ProcessStateMachine();
         this.cycleTimer = schedule.scheduleJob("*/5 * * * * *", this.ProcessStateMachine.bind(this)  );
     }
 
-    /**
-     * Is called when adapter shuts down - callback has to be called under any circumstances!
-     * @param {() => void} callback
-     */
+
     onUnload(callback) {
         try {
-            // Here you must clear all timeouts or intervals that may still be active
-            // clearTimeout(timeout1);
-            // clearTimeout(timeout2);
-            // ...
-            // clearInterval(interval1);
 
             callback();
         } catch (e) {
@@ -153,33 +93,13 @@ class HyperionNgRemote extends utils.Adapter {
         }
     }
 
-    // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-    // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-    // /**
-    //  * Is called if a subscribed object changes
-    //  * @param {string} id
-    //  * @param {ioBroker.Object | null | undefined} obj
-    //  */
-    // onObjectChange(id, obj) {
-    //     if (obj) {
-    //         // The object was changed
-    //         this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-    //     } else {
-    //         // The object was deleted
-    //         this.log.info(`object ${id} deleted`);
-    //     }
-    // }
-
-    /**
-     * Is called if a subscribed state changes
-     * @param {string} id
-     * @param {ioBroker.State | null | undefined} state
-     */
+    
     async onStateChange(id, state) {
         if (this.currentState == this.states.running) {
             
             if (state) {
                 
+                /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
                 if (state.ack == false) {
                     switch( this.IdWithoutPath(id) ){
                         case "trigger": {
@@ -194,7 +114,8 @@ class HyperionNgRemote extends utils.Adapter {
                         }
                         case "visible": {
                             /* first we have to get the priority of which the visibility shall be changed */
-                            var prio = await this.getStateAsync( this.PathFromId(id) + ".priority" );
+                            var prioState = await this.getStateAsync( this.PathFromId(id) + ".priority" );
+                            var prio = prioState.val;
                             if (state.val == true) {
                                 /* user wants to set priority visible, thus, just execute a SourceSelection */
                                 this.conn.SourceSelection(prio);
@@ -218,6 +139,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
+    
     NotifyCallback(command, error) {
         if (error) {
             if (error == "timeout") {
@@ -295,8 +217,6 @@ class HyperionNgRemote extends utils.Adapter {
         this.setState("trigger", activePriority, true);
         this.setState("triggerByName", this.PrioToName(activePriority), true);
         this.log.info("active: "+activePriority);
-        
-        
     }
     
     
@@ -468,6 +388,7 @@ class HyperionNgRemote extends utils.Adapter {
                 break;
             }
 
+            //Todo: ???
             this.ProcessStateMachine();
         }
     }
@@ -578,7 +499,7 @@ class HyperionNgRemote extends utils.Adapter {
     
 
     async CreateDataPoints() {
-
+        
         /* data point for directly setting the active priority */
         await this.setObjectNotExistsAsync("trigger",       {type: "state", common: {name: "select active priority", type: "number", role: "state", read: true, write: true } });
         await this.setObjectNotExistsAsync("triggerByName", {type: "state", common: {name: "select active priority", type: "string", role: "state", read: true, write: true } });
@@ -683,10 +604,6 @@ class HyperionApi
         this.SendRequest(requestJson);
     }
 
-    ServerInfoClbk(data) {
-        this.serverinfo = data;
-    }
-
     GetPriorities() {
         return this.serverinfo.info.priorities;
     }
@@ -698,10 +615,6 @@ class HyperionApi
             tan: 1
         };
         this.SendRequest(requestJson);
-    }
-
-    SysInfoClbk(data) {
-        this.sysinfo = data;
     }
 
     GetSysInfo() {
@@ -806,8 +719,7 @@ class HyperionApi
         /*
          * Now make the actual request.
          * The result will later be available in the request callback.
-         */
-        
+         */        
         this.logger("sending request: " + requestJson.command);
         
         
@@ -838,32 +750,15 @@ class HyperionApi
                     } else {
                         /* request was executed properly by hyperion */
                         self.logger("request executed properly: " + responseJson.command);
+                        
+                        /* now, depending on the received message, further actions are necessary */
                         switch(responseJson.command) {
-
                             case "serverinfo": {
-                                
-                                var active = 0;
-                                
-                                for (var prio of responseJson.info.priorities) {
-                                    if (prio.visible == true) {
-                                        active = prio.priority;
-                                        break;
-                                    }
-                                }
-                                
-                                
-                                self.logger("active2: "+active);
-                                self.ServerInfoClbk(responseJson);
+                                self.serverinfo = responseJson;
                                 break;
                             }
                             case "sysinfo": {
-                                self.SysInfoClbk(responseJson);
-                                break;
-                            }
-                            case "color": {
-                                break;
-                            }
-                            case "sourceselect": {
+                                self.sysinfo = responseJson;
                                 break;
                             }
                             default: {
@@ -872,7 +767,8 @@ class HyperionApi
                         }
                     }
                 }
-                /* finally, notify application via callback */
+                
+                /* finally, notify the application via callback */
                 self.callback(retCommand, retError);
             }
         );
