@@ -51,21 +51,24 @@ class HyperionNgRemote extends utils.Adapter {
         this.deleteionConfirmed = 0;
         this.recoveryFinished = false;
         this.serverInfoTimer = null;
+        this.cycleTimer = null;
     }
 
 
     async onReady() {
 
+        /* we are not connected at the beginning (this will affect the state shown in admin adapter instance tab) */
         this.setState("info.connection", false, true);
 
-        this.ProcessStateMachine();
-        this.cycleTimer = schedule.scheduleJob("*/5 * * * * *", this.ProcessStateMachine.bind(this)  );
+        /* all further work is handled by or main function, which needs to be called cyclically */
+        this.MainFunction();
+        this.cycleTimer = schedule.scheduleJob("*/5 * * * * *", this.MainFunction.bind(this)  );
     }
 
 
     onUnload(callback) {
         try {
-
+            //todo: stop all pending timers
             callback();
         } catch (e) {
             callback();
@@ -77,8 +80,10 @@ class HyperionNgRemote extends utils.Adapter {
         if (typeof obj === "object") {
 
             /* actions depend on command */
-            this.log.info("message received: " + obj.command);
-
+            
+            
+            
+            
             if (obj.command === "GetEffectList") {
                 /* share our effect list */
                 if (obj.callback) {
@@ -95,12 +100,11 @@ class HyperionNgRemote extends utils.Adapter {
 
     
     async onStateChange(id, state) {
-        if (this.currentState == this.states.running) {
             
             if (state) {
                 
                 /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
-                if (state.ack == false) {
+                if ( (this.currentState == this.states.running) && (state.ack == false) ) {
                     switch( this.IdWithoutPath(id) ){
                         case "trigger": {
                             /* set new priority according to user's wish */
@@ -135,18 +139,18 @@ class HyperionNgRemote extends utils.Adapter {
                 this.log.info(`state ${id} deleted`);
                 //todo: throw error
             }
-        }
+        
     }
 
 
     
     NotifyCallback(command, error) {
         if (error) {
-            if (error == "timeout") {
-                this.log.info("timeout!!");
-            }
             this.responseError = true;
+            this.log.info("error in response for command: " + command);
+            this.log.info(error);
         } else {
+            this.log.debug("request executed properly: " + command);
             switch(command) {
                 case "serverinfo": {
                     /* remember success for later use */
@@ -191,7 +195,7 @@ class HyperionNgRemote extends utils.Adapter {
             }
         }
 
-        this.ProcessStateMachine();
+        this.MainFunction();
     }
     
         
@@ -220,14 +224,8 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
-    UpdateDatapointsSysinfo() {
-        
+    UpdateDatapointsSysinfo() {        
         var sysinfo = this.conn.GetSysInfo();
-        
-        if (!sysinfo)
-        {
-            this.log.info("error");
-        }
         
         this.setState("SystemInfo.Hyperion.build", sysinfo.info.hyperion.build, true);
         this.setState("SystemInfo.Hyperion.gitremote", sysinfo.info.hyperion.gitremote, true);
@@ -246,7 +244,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
 
-    async ProcessStateMachine() {
+    async MainFunction() {
         /* actions depend on current state of the adapter */
         switch (this.currentState) {
 
@@ -258,7 +256,7 @@ class HyperionNgRemote extends utils.Adapter {
                     this.log.info("init => error");                    
                 } else {
                     /* create hyperion api obj and send initial commands to get some information from server */
-                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 30000);
+                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 45000);
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
 
@@ -310,19 +308,10 @@ class HyperionNgRemote extends utils.Adapter {
                  * confirmed by hyperion server.
                  */
                 if ( this.configElementsRequested == this.configElementsConfirmed ) {
-                    /*
-                     * Now that all configuration went well, we can set up a few things:
-                     * - create all the data points
-                     * - set info state, this will make the admin adapter show our instance as "connected"
-                     * - set a schedule so that we get a cyclic ServerInfo to keep track of changes on server side
-                     */
-                    this.CreateDataPoints();
-                    this.setState("info.connection", true, true);
-                    //this.serverInfoTimer = schedule.scheduleJob("*/30 * * * * *", () => {this.conn.ServerInfo();} );
-
-                    
-                    this.currentState = this.states.running;
-                    this.log.info("configuring => ready");
+                    this.serverinfoFinished = false;
+                    this.conn.ServerInfo();
+                    this.currentState = this.states.checking;
+                    this.log.info("configuring => checking");
                     
                 } else if (this.responseError == true) {
                     this.currentState = this.states.recovering;
@@ -330,10 +319,41 @@ class HyperionNgRemote extends utils.Adapter {
                 }
                 break;
             }
+            
+            case this.states.checking: {
+                if (this.serverinfoFinished == true) {
+                    
+                    if (this.ServerConfigChanged() == false) {                        
+                        /*
+                        * Now that all configuration went well, we can set up a few things:
+                        * - create all the data points
+                        * - set info state, this will make the admin adapter show our instance as "connected"
+                        * - set a schedule so that we get a cyclic ServerInfo to keep track of changes on server side
+                        */
+                        this.CreateStates();
+                        this.setState("info.connection", true, true);
+                        this.serverInfoTimer = schedule.scheduleJob("*/60 * * * * *", () => {this.conn.ServerInfo();} );
+
+                        this.currentState = this.states.running;
+                        this.log.info("checking => running");
+                    } else {
+                        this.currentState = this.states.recovering;
+                        this.log.info("checking => recovering");
+                    }
+                    break;
+                    
+                }
+            }
 
             case this.states.running: {
                 
-                if (this.responseError == true) {
+                if ( (this.responseError == true) || (this.ServerConfigChanged() == true) ) {
+                    
+                    if (this.responseError == true) {
+                        this.log.info("response error occured");
+                    } else {
+                        this.log.info("server configuration has changed");
+                    }
                     
                     /* stop asking for serverinfos */
                     if (this.serverInfoTimer) {
@@ -341,7 +361,7 @@ class HyperionNgRemote extends utils.Adapter {
                     }
                     
                     this.currentState = this.states.recovering;
-                    this.log.info("ready => recovering");
+                    this.log.info("running => recovering");
                 }
                 break;
             }
@@ -362,7 +382,7 @@ class HyperionNgRemote extends utils.Adapter {
                 
                 setTimeout( () => {
                     this.recoveryFinished  = true;
-                }, 30000);
+                }, 70000);
 
                 this.currentState = this.states.waiting;
                 this.log.info("recovering => waiting");
@@ -371,10 +391,12 @@ class HyperionNgRemote extends utils.Adapter {
 
             case this.states.waiting: {
                 
-                if (this.recoveryFinished == true) {
-                    this.recoveryFinished = false;                                    
-                    this.currentState = this.states.init;
-                    this.log.info("waiting => init");
+                if (this.recoveryFinished == true) {                                        
+                    this.conn.ServerInfo();
+                    this.conn.SysInfo();
+
+                    this.currentState = this.states.connecting;                    
+                    this.log.info("waiting => connecting");
                 }
                 break;
             }
@@ -389,8 +411,30 @@ class HyperionNgRemote extends utils.Adapter {
             }
 
             //Todo: ???
-            this.ProcessStateMachine();
+            this.MainFunction();
         }
+    }
+    
+    ServerConfigChanged() {
+        
+        var ret = false;        
+        var priosConfigured = this.config.colors.length + this.config.effects.length;
+        var priosInServer = 0;
+        
+        for (var prio of this.conn.GetPriorities() ) {
+            if (prio.origin.includes(this.config.appname)) {
+                priosInServer++;                
+            }
+        }
+        
+        if (priosInServer != priosConfigured) {
+            ret = true;
+            this.log.debug("Priorities in server config: " + priosInServer);
+            this.log.debug("Priorities in adapter config: " + priosConfigured);
+        }
+        
+        
+        return ret;        
     }
 
 
@@ -484,6 +528,7 @@ class HyperionNgRemote extends utils.Adapter {
 
     DeletePriorities() {
         var configuredPrios = this.conn.GetPriorities()
+        this.deleteionConfirmed = 0;
         for (var prio of configuredPrios) {
             if ( prio.origin.includes(this.config.appname) ) {
                 /* this was set by us in an previous run, thus, get rid of it */
@@ -498,7 +543,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
 
-    async CreateDataPoints() {
+    async CreateStates() {
         
         /* data point for directly setting the active priority */
         await this.setObjectNotExistsAsync("trigger",       {type: "state", common: {name: "select active priority", type: "number", role: "state", read: true, write: true } });
@@ -737,20 +782,14 @@ class HyperionApi
 
                 if (error) {
                     /* this means request was not answered by hyperion */
-                    self.logger("request not executed: " + requestJson.command);
-                    self.logger(error)
                     retError = error;
                 } else {
                     var responseJson = JSON.parse(body);
                     if (responseJson.success == false) {
                         /* request answered by hyperion, but with issues */
-                        self.logger("request executed with issues: " + responseJson.command);
-                        self.logger(responseJson.error)
                         retError = responseJson.error;
                     } else {
                         /* request was executed properly by hyperion */
-                        self.logger("request executed properly: " + responseJson.command);
-                        
                         /* now, depending on the received message, further actions are necessary */
                         switch(responseJson.command) {
                             case "serverinfo": {
@@ -776,12 +815,8 @@ class HyperionApi
     
     
     HandleTimeout(command) {
-        this.logger("timeout!");
-        this.callback(command, "timeout");
+        this.callback(command, "timeout detected by application");
     }
-    
-    
-
 }
 
 
