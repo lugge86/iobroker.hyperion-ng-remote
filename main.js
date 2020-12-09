@@ -34,11 +34,10 @@ class HyperionNgRemote extends utils.Adapter {
             ...options,
             name: "hyperion-ng-remote",
         });
-        this.on("ready", this.onReady.bind(this));
-        this.on("stateChange", this.onStateChange.bind(this));
-        // this.on("objectChange", this.onObjectChange.bind(this));
-         this.on("message", this.onMessage.bind(this));
-        this.on("unload", this.onUnload.bind(this));
+        this.on("ready", this.AdapterInit.bind(this));
+        this.on("stateChange", this.StateChangeCallback.bind(this));
+         this.on("message", this.MessageCallback.bind(this));
+        this.on("unload", this.AdapterShutdown.bind(this));
 
         this.currentState = this.states.init;
         
@@ -55,7 +54,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    async onReady() {
+    async AdapterInit() {
 
         /* we are not connected at the beginning (this will affect the state shown in admin adapter instance tab) */
         this.setState("info.connection", false, true);
@@ -66,7 +65,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
-    onUnload(callback) {
+    AdapterShutdown(callback) {
         try {
             //todo: stop all pending timers
             callback();
@@ -75,176 +74,13 @@ class HyperionNgRemote extends utils.Adapter {
         }
     }
 
-
-    onMessage(obj) {
-        if (typeof obj === "object") {
-
-            /* actions depend on command */
-            
-            
-            
-            
-            if (obj.command === "GetEffectList") {
-                /* share our effect list */
-                if (obj.callback) {
-                    this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
-                }
-            } else if (obj.command === "ConfigSanityCheck") {
-                /* make a sanity check on the given config */
-                if (obj.callback) {
-                    this.sendTo(obj.from, obj.command, this.ConfigSanityCheck(obj.message), obj.callback);
-                }
-            }
-        }
-    }
-
     
-    async onStateChange(id, state) {
-            
-            if (state) {
-                
-                /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
-                if ( (this.currentState == this.states.running) && (state.ack == false) ) {
-                    switch( this.IdWithoutPath(id) ){
-                        case "trigger": {
-                            /* set new priority according to user's wish */
-                            this.conn.SourceSelection(state.val);
-                            break;
-                        }
-                        case "triggerByName": {
-                            /* before we can set the new priority, we have to map the name to a prio number */
-                            this.conn.SourceSelection( this.NameToPrio(state.val) );
-                            break;
-                        }
-                        case "visible": {
-                            /* first we have to get the priority of which the visibility shall be changed */
-                            var prioState = await this.getStateAsync( this.PathFromId(id) + ".priority" );
-                            var prio = prioState.val;
-                            if (state.val == true) {
-                                /* user wants to set priority visible, thus, just execute a SourceSelection */
-                                this.conn.SourceSelection(prio);
-                            } else {
-                                /* setting to false is not supported at the moment, this would mean no prio is active */
-                            }
-                            
-                            break;
-                        }
-                        default: {
-                            break;
-                        }
-                    }
-                }
-
-            } else {
-                this.log.info(`state ${id} deleted`);
-                //todo: throw error
-            }
-        
-    }
-
-
-    
-    NotifyCallback(command, error) {
-        if (error) {
-            this.responseError = true;
-            this.log.info("error in response for command: " + command);
-            this.log.info(error);
-        } else {
-            this.log.debug("request executed properly: " + command);
-            switch(command) {
-                case "serverinfo": {
-                    /* remember success for later use */
-                    this.serverinfoFinished = true;
-                    
-                    /* everytime we receive a ServerInfo, we can update all our data points */
-                    this.UpdateDatapointsPriority();
-                    break;
-                }
-                case "sysinfo": {
-                    /* remember success for later use */
-                    this.sysinfoFinished = true;
-                    break;
-                }
-                case "color": {
-                    /* we have to count the responses in order to know when configuration is complete */
-                    this.configElementsConfirmed++;
-                    break;
-                }
-                case "effect": {
-                    /* we have to count the responses in order to know when configuration is complete */
-                    this.configElementsConfirmed++;
-                    break;
-                }
-                case "sourceselect": {
-                    /*
-                     * If a SourceSelect was successful during running state,
-                     * we just execute a ServerInfo afterwards.
-                     * This is necessary in order to update all the data points */
-                    if (this.currentState == this.states.running) {                        
-                        setTimeout( () => { this.conn.ServerInfo(); }, 1400);
-                    }
-                    break;
-                }
-                case "clear": {
-                    this.deleteionConfirmed++;
-                    break;
-                }
-                default: {
-                    break;
-                }
-            }
-        }
-
-        this.MainFunction();
-    }
-    
-        
-    UpdateDatapointsPriority() {
-        var activePriority = null;
-        var availablePriorities = this.conn.GetPriorities();
-        
-        for (var priority of availablePriorities) {
-            var folderName = "Priorities."+this.PrioToName(priority.priority);
-            
-            this.setState(folderName+".componentId", priority.componentId, true);
-            this.setState(folderName+".origin", priority.origin, true);
-            this.setState(folderName+".priority", priority.priority, true);
-            this.setState(folderName+".owner", priority.owner, true);
-            this.setState(folderName+".active", priority.active, true);
-            this.setState(folderName+".visible", priority.visible, true);
-            
-            if (priority.visible == true) {
-                activePriority = priority.priority;
-            }
-        }
-        
-        this.setState("trigger", activePriority, true);
-        this.setState("triggerByName", this.PrioToName(activePriority), true);
-        this.log.info("active: "+activePriority);
-    }
-    
-    
-    UpdateDatapointsSysinfo() {        
-        var sysinfo = this.conn.GetSysInfo();
-        
-        this.setState("SystemInfo.Hyperion.build", sysinfo.info.hyperion.build, true);
-        this.setState("SystemInfo.Hyperion.gitremote", sysinfo.info.hyperion.gitremote, true);
-        this.setState("SystemInfo.Hyperion.time", sysinfo.info.hyperion.time, true);
-        this.setState("SystemInfo.Hyperion.version", sysinfo.info.hyperion.version, true);
-        this.setState("SystemInfo.Hyperion.id", sysinfo.info.hyperion.id, true);
-        
-        this.setState("SystemInfo.System.architecture", sysinfo.info.system.architecture, true);
-        this.setState("SystemInfo.System.hostName", sysinfo.info.system.hostName, true);
-        this.setState("SystemInfo.System.kernelType", sysinfo.info.system.kernelType, true);
-        this.setState("SystemInfo.System.kernelVersion", sysinfo.info.system.kernelVersion, true);
-        this.setState("SystemInfo.System.prettyName", sysinfo.info.system.prettyName, true);
-        this.setState("SystemInfo.System.productType", sysinfo.info.system.productType, true);
-        this.setState("SystemInfo.System.productVersion", sysinfo.info.system.productVersion, true);
-        this.setState("SystemInfo.System.wordSize", sysinfo.info.system.wordSize, true);
+    MainFunction() {
+        this.ProcessStateMachine();
     }
     
 
-    async MainFunction() {
+    async ProcessStateMachine() {
         /* actions depend on current state of the adapter */
         switch (this.currentState) {
 
@@ -411,12 +247,179 @@ class HyperionNgRemote extends utils.Adapter {
             }
 
             //Todo: ???
-            this.MainFunction();
+            this.ProcessStateMachine();
         }
     }
     
-    ServerConfigChanged() {
+    MessageCallback(obj) {
+        if (typeof obj === "object") {
+
+            /* actions depend on command */
+            
+            
+            
+            
+            if (obj.command === "GetEffectList") {
+                /* share our effect list */
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
+                }
+            } else if (obj.command === "ConfigSanityCheck") {
+                /* make a sanity check on the given config */
+                if (obj.callback) {
+                    this.sendTo(obj.from, obj.command, this.ConfigSanityCheck(obj.message), obj.callback);
+                }
+            }
+        }
+    }
+
+    
+    async StateChangeCallback(id, state) {
+            
+            if (state) {
+                
+                /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
+                if ( (this.currentState == this.states.running) && (state.ack == false) ) {
+                    switch( this.IdWithoutPath(id) ){
+                        case "trigger": {
+                            /* set new priority according to user's wish */
+                            this.conn.SourceSelection(state.val);
+                            break;
+                        }
+                        case "triggerByName": {
+                            /* before we can set the new priority, we have to map the name to a prio number */
+                            this.conn.SourceSelection( this.NameToPrio(state.val) );
+                            break;
+                        }
+                        case "visible": {
+                            /* first we have to get the priority of which the visibility shall be changed */
+                            var prioState = await this.getStateAsync( this.PathFromId(id) + ".priority" );
+                            var prio = prioState.val;
+                            if (state.val == true) {
+                                /* user wants to set priority visible, thus, just execute a SourceSelection */
+                                this.conn.SourceSelection(prio);
+                            } else {
+                                /* setting to false is not supported at the moment, this would mean no prio is active */
+                            }
+                            
+                            break;
+                        }
+                        default: {
+                            break;
+                        }
+                    }
+                }
+
+            } else {
+                this.log.info(`state ${id} deleted`);
+                //todo: throw error
+            }
         
+    }
+
+
+    
+    NotifyCallback(command, error) {
+        if (error) {
+            this.responseError = true;
+            this.log.info("error in response for command: " + command);
+            this.log.info(error);
+        } else {
+            this.log.debug("request executed properly: " + command);
+            switch(command) {
+                case "serverinfo": {
+                    /* remember success for later use */
+                    this.serverinfoFinished = true;
+                    
+                    /* everytime we receive a ServerInfo, we can update all our data points */
+                    this.UpdateDatapointsPriority();
+                    break;
+                }
+                case "sysinfo": {
+                    /* remember success for later use */
+                    this.sysinfoFinished = true;
+                    break;
+                }
+                case "color": {
+                    /* we have to count the responses in order to know when configuration is complete */
+                    this.configElementsConfirmed++;
+                    break;
+                }
+                case "effect": {
+                    /* we have to count the responses in order to know when configuration is complete */
+                    this.configElementsConfirmed++;
+                    break;
+                }
+                case "sourceselect": {
+                    /*
+                     * If a SourceSelect was successful during running state,
+                     * we just execute a ServerInfo afterwards.
+                     * This is necessary in order to update all the data points */
+                    if (this.currentState == this.states.running) {                        
+                        setTimeout( () => { this.conn.ServerInfo(); }, 1400);
+                    }
+                    break;
+                }
+                case "clear": {
+                    this.deleteionConfirmed++;
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+        }
+
+        this.ProcessStateMachine();
+    }
+    
+    
+    UpdateDatapointsPriority() {
+        var activePriority = null;
+        var availablePriorities = this.conn.GetPriorities();
+        
+        for (var priority of availablePriorities) {
+            var folderName = "Priorities."+this.PrioToName(priority.priority);
+            
+            this.setState(folderName+".componentId", priority.componentId, true);
+            this.setState(folderName+".origin", priority.origin, true);
+            this.setState(folderName+".priority", priority.priority, true);
+            this.setState(folderName+".owner", priority.owner, true);
+            this.setState(folderName+".active", priority.active, true);
+            this.setState(folderName+".visible", priority.visible, true);
+            
+            if (priority.visible == true) {
+                activePriority = priority.priority;
+            }
+        }
+        
+        this.setState("trigger", activePriority, true);
+        this.setState("triggerByName", this.PrioToName(activePriority), true);
+        this.log.info("active: "+activePriority);
+    }
+    
+    
+    UpdateDatapointsSysinfo() {        
+        var sysinfo = this.conn.GetSysInfo();
+        
+        this.setState("SystemInfo.Hyperion.build", sysinfo.info.hyperion.build, true);
+        this.setState("SystemInfo.Hyperion.gitremote", sysinfo.info.hyperion.gitremote, true);
+        this.setState("SystemInfo.Hyperion.time", sysinfo.info.hyperion.time, true);
+        this.setState("SystemInfo.Hyperion.version", sysinfo.info.hyperion.version, true);
+        this.setState("SystemInfo.Hyperion.id", sysinfo.info.hyperion.id, true);
+        
+        this.setState("SystemInfo.System.architecture", sysinfo.info.system.architecture, true);
+        this.setState("SystemInfo.System.hostName", sysinfo.info.system.hostName, true);
+        this.setState("SystemInfo.System.kernelType", sysinfo.info.system.kernelType, true);
+        this.setState("SystemInfo.System.kernelVersion", sysinfo.info.system.kernelVersion, true);
+        this.setState("SystemInfo.System.prettyName", sysinfo.info.system.prettyName, true);
+        this.setState("SystemInfo.System.productType", sysinfo.info.system.productType, true);
+        this.setState("SystemInfo.System.productVersion", sysinfo.info.system.productVersion, true);
+        this.setState("SystemInfo.System.wordSize", sysinfo.info.system.wordSize, true);
+    }
+    
+    
+    ServerConfigChanged() {        
         var ret = false;        
         var priosConfigured = this.config.colors.length + this.config.effects.length;
         var priosInServer = 0;
@@ -431,15 +434,13 @@ class HyperionNgRemote extends utils.Adapter {
             ret = true;
             this.log.debug("Priorities in server config: " + priosInServer);
             this.log.debug("Priorities in adapter config: " + priosConfigured);
-        }
-        
+        }        
         
         return ret;        
     }
 
 
     ConfigSanityCheck(config) {
-
         var configSane = true;
 
         /* check if port is in allowed range */
