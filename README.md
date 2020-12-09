@@ -14,6 +14,47 @@
 
 Remote for hyperion.ng
 
+## Overview
+
+This is hyperion-ng-remote, an adapter for ioBroker to access and control a hyperion.ng server.
+
+<b><span style="color:red">This adapter is still alpha!</span></b>
+
+I started this adapter for accessing my hyperion.ng, running on a Raspberry Pi 3.
+The previous adapter only supports classic hyperion and seems to be no longer maintained.
+
+### Features
+Currently, only a set of basic features is implemented.
+I started developing the adapter with my personal use cases in mind, thus, the feature set might not be what you are expecting.
+
+Currently, the following is supported and tested:
+- readout server information and system information
+- adding new colors and effects via admin tab
+- colors and effects can have a "friendly name" set in addition to their native priority numbers
+- activate colors and effects via data points
+    - activation by setting the appropriate priority number
+    - activation via a priority-specific trigger datapoint
+    - activation by setting the "friendly name" of a configured priority
+
+### Roadmap
+Developing is ongoing, however, main focus is on stability and reliability instead of throwing in new features.
+
+The following is on the ToDo-List and will be implemented sooner or later. No feature requests are necessary:
+- cleanup of admin tab
+- using of TCP/IP instead of http for accessing the server
+- enable/disable components via datapoints
+- advanced effect configuration (change effect-specific parameters)
+- "Live-Configurator" for colors and effects in admin tab
+- support of the duration parameter of colors and effects which allows a couple of nice applications, e.g. notifications
+
+### Constraints
+At the moment, I do not plan to implement full means of configuration capability.
+Basic setup of hyperion.ng will always have to be done via the common means, e.g. editing config file or using the web GUI.
+
+Obsolete data points are never deleted at the moment.
+When colors or effects are dropped from configuration, related data points can be deleted by hand. 
+
+
 ## Developer manual
 This section is intended for the developer. It can be deleted later
 
@@ -94,7 +135,7 @@ For later updates, the above procedure is not necessary. Just do the following:
 ## License
 MIT License
 
-Copyright (c) 2020 lugge86 <lugge@lugge.lugge>
+Copyright (c) 2020 lugge86 <lugge@mailbox.org
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
