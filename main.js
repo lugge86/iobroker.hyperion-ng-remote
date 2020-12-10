@@ -7,8 +7,8 @@
 // The adapter-core module gives you access to the core ioBroker functions
 // you need to create an adapter
 const utils = require("@iobroker/adapter-core");
-const request = require('request');
 const schedule = require('node-schedule');
+const net = require('net');
 
 
 
@@ -25,7 +25,8 @@ class HyperionNgRemote extends utils.Adapter {
         running: 5,
         error: 6,
         recovering: 7,
-        waiting: 8
+        waiting: 8,
+        dummy: 9
     };
 
 
@@ -93,13 +94,27 @@ class HyperionNgRemote extends utils.Adapter {
                 } else {
                     /* create hyperion api obj and send initial commands to get some information from server */
                     this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 45000);
+                    
+                    this.conn.Connect();
+                    
+                    this.currentState = this.states.dummy;
+                    this.log.info("init => dummy");
+                }
+
+                break;
+            }
+            
+            
+            case this.states.dummy: {
+                
+                if (this.conn.connected == true) {
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
 
                     this.currentState = this.states.connecting;
                     this.log.info("init => connecting");
                 }
-
+                
                 break;
             }
 
@@ -628,8 +643,25 @@ class HyperionApi
         this.origin = origin;
         this.callback = notifyClbk;
         this.logger = logger;
-        this.jsonUrl = "http://" + ip + ":" + port + "/json-rpc";
+        this.ip = ip;
+        this.port = port;
         this.timeout = timeout;
+        this.rxBuffer = "";
+        
+        this.socket = new net.Socket();
+        this.socket.on("data", this.OnDataClbk.bind(this));
+        this.socket.on("close", this.OnCloseClbk.bind(this));
+        this.connected = false;
+        
+        this.debugCmdSent = 0;
+        this.debugChungsReceived = 0;
+        this.debugResponsesReceived = 0;
+        
+        this.pendingCtr = 0;
+    }
+    
+    Connect() {
+        this.socket.connect(this.port, this.ip, () => { this.connected = true});
     }
 
     SourceSelection(prio) {
@@ -644,7 +676,7 @@ class HyperionApi
     ServerInfo() {
         var requestJson = {
             command: "serverinfo",
-            subscribe:["priorities-update"],
+            //subscribe:["priorities-update"],
             tan: 1
         };
         this.SendRequest(requestJson);
@@ -748,70 +780,74 @@ class HyperionApi
         this.Clear(-1);
     }
 
+        
+    
+    OnDataClbk(data) {
+        this.rxBuffer += data;
+        this.debugChungsReceived++;
+        
+        var jsonArray = this.rxBuffer.split(/\r?\n/);       
+        var i;
+
+        for (i=0; i<jsonArray.length-1; i++  ) {
+            this.HandleResponse( JSON.parse(jsonArray[i]) );
+            this.pendingCtr--;
+            this.debugResponsesReceived++;
+        }
+            
+        this.rxBuffer =  jsonArray[i];
+    }
+    
+    
+    OnCloseClbk(data) {
+        this.connected = false;
+    }
+    
+        
+    HandleResponse(responseJson) {
+        
+        var retError = null;
+        
+        if (responseJson.success == false) {
+            /* request answered by hyperion, but with issues */
+            retError = responseJson.error;
+        } else {
+            /* request was executed properly by hyperion */
+            /* now, depending on the received message, further actions are necessary */
+            
+            this.logger("Received: "+responseJson.command);
+            switch(responseJson.command) {
+                case "serverinfo": {
+                    this.serverinfo = responseJson;
+                    break;
+                }
+                case "sysinfo": {
+                    this.sysinfo = responseJson;
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+        }
+        
+        /* finally, notify the application via callback */
+        this.callback(responseJson.command, retError);
+    }
+    
+    
+    
 /***********************************************************/
     SendRequest(requestJson) {
+        
         /* first, create object containing all the needed options for our request */
-        var requestString = JSON.stringify(requestJson);
-        var requestOptions = {
-            url: this.jsonUrl,
-            method: 'POST',
-            body: requestString,
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': requestString.length
-            }
-        };
+        var requestString = (JSON.stringify(requestJson) + "\n");
 
-        /*
-         * Now make the actual request.
-         * The result will later be available in the request callback.
-         */        
         this.logger("sending request: " + requestJson.command);
+        this.socket.write(requestString);
         
-        
-        var timeout = setTimeout(this.HandleTimeout.bind(this), this.timeout, requestJson.command); // Hello, John
-        
-        var self = this;
-        request.post(requestOptions,
-            function(error, response, body) {
-
-                /* first, clear the timeout because we have some kind of response from server */
-                clearTimeout(timeout);
-                
-                var retError = null;
-                var retCommand = requestJson.command;
-
-                if (error) {
-                    /* this means request was not answered by hyperion */
-                    retError = error;
-                } else {
-                    var responseJson = JSON.parse(body);
-                    if (responseJson.success == false) {
-                        /* request answered by hyperion, but with issues */
-                        retError = responseJson.error;
-                    } else {
-                        /* request was executed properly by hyperion */
-                        /* now, depending on the received message, further actions are necessary */
-                        switch(responseJson.command) {
-                            case "serverinfo": {
-                                self.serverinfo = responseJson;
-                                break;
-                            }
-                            case "sysinfo": {
-                                self.sysinfo = responseJson;
-                                break;
-                            }
-                            default: {
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                /* finally, notify the application via callback */
-                self.callback(retCommand, retError);
-            }
-        );
+        this.pendingCtr++;
+        this.debugCmdSent++;
     }
     
     
