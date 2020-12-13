@@ -112,7 +112,7 @@ class HyperionNgRemote extends utils.Adapter {
                     this.conn.SysInfo();
 
                     this.currentState = this.states.connecting;
-                    this.log.info("init => connecting");
+                    this.log.info("dummy => connecting");
                 }
                 
                 break;
@@ -130,7 +130,7 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.cleaning;
                     this.log.info("connecting => cleaning");
                     
-                } else if (this.responseError == true) {
+                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.info("connecting => recovering");
                 }
@@ -146,7 +146,7 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.configuring;
                     this.log.info("cleaning => configuring");
                     
-                } else if (this.responseError == true) {
+                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.info("cleaning => recovering");
                 }
@@ -164,7 +164,7 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.checking;
                     this.log.info("configuring => checking");
                     
-                } else if (this.responseError == true) {
+                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.info("configuring => recovering");
                 }
@@ -198,10 +198,12 @@ class HyperionNgRemote extends utils.Adapter {
 
             case this.states.running: {
                 
-                if ( (this.responseError == true) || (this.ServerConfigChanged() == true) ) {
+                if ( (this.responseError == true) || (this.ServerConfigChanged() == true) || (this.conn.connected == false) ) {
                     
                     if (this.responseError == true) {
                         this.log.info("response error occured");
+                    } else if (this.conn.connected == false) {
+                        this.log.info("connection aborted");
                     } else {
                         this.log.info("server configuration has changed");
                     }
@@ -234,7 +236,9 @@ class HyperionNgRemote extends utils.Adapter {
                 setTimeout( () => {
                     this.recoveryFinished  = true;
                 }, 70000);
-
+                this.log.info("trying to reconnect in 70s");
+                
+                
                 this.currentState = this.states.waiting;
                 this.log.info("recovering => waiting");
                 break;
@@ -242,12 +246,10 @@ class HyperionNgRemote extends utils.Adapter {
 
             case this.states.waiting: {
                 
-                if (this.recoveryFinished == true) {                                        
-                    this.conn.ServerInfo();
-                    this.conn.SysInfo();
-
-                    this.currentState = this.states.connecting;                    
-                    this.log.info("waiting => connecting");
+                if (this.recoveryFinished == true) {                    
+                    this.conn.Connect();
+                    this.currentState = this.states.dummy;                    
+                    this.log.info("waiting => dummy");
                 }
                 break;
             }
@@ -417,20 +419,20 @@ class HyperionNgRemote extends utils.Adapter {
     UpdateDatapointsSysinfo() {        
         var sysinfo = this.conn.GetSysInfo();
         
-        this.setState("SystemInfo.Hyperion.build", sysinfo.info.hyperion.build, true);
-        this.setState("SystemInfo.Hyperion.gitremote", sysinfo.info.hyperion.gitremote, true);
-        this.setState("SystemInfo.Hyperion.time", sysinfo.info.hyperion.time, true);
-        this.setState("SystemInfo.Hyperion.version", sysinfo.info.hyperion.version, true);
-        this.setState("SystemInfo.Hyperion.id", sysinfo.info.hyperion.id, true);
+        this.setState("SystemInfo.Hyperion.build", sysinfo.hyperion.build, true);
+        this.setState("SystemInfo.Hyperion.gitremote", sysinfo.hyperion.gitremote, true);
+        this.setState("SystemInfo.Hyperion.time", sysinfo.hyperion.time, true);
+        this.setState("SystemInfo.Hyperion.version", sysinfo.hyperion.version, true);
+        this.setState("SystemInfo.Hyperion.id", sysinfo.hyperion.id, true);
         
-        this.setState("SystemInfo.System.architecture", sysinfo.info.system.architecture, true);
-        this.setState("SystemInfo.System.hostName", sysinfo.info.system.hostName, true);
-        this.setState("SystemInfo.System.kernelType", sysinfo.info.system.kernelType, true);
-        this.setState("SystemInfo.System.kernelVersion", sysinfo.info.system.kernelVersion, true);
-        this.setState("SystemInfo.System.prettyName", sysinfo.info.system.prettyName, true);
-        this.setState("SystemInfo.System.productType", sysinfo.info.system.productType, true);
-        this.setState("SystemInfo.System.productVersion", sysinfo.info.system.productVersion, true);
-        this.setState("SystemInfo.System.wordSize", sysinfo.info.system.wordSize, true);
+        this.setState("SystemInfo.System.architecture", sysinfo.system.architecture, true);
+        this.setState("SystemInfo.System.hostName", sysinfo.system.hostName, true);
+        this.setState("SystemInfo.System.kernelType", sysinfo.system.kernelType, true);
+        this.setState("SystemInfo.System.kernelVersion", sysinfo.system.kernelVersion, true);
+        this.setState("SystemInfo.System.prettyName", sysinfo.system.prettyName, true);
+        this.setState("SystemInfo.System.productType", sysinfo.system.productType, true);
+        this.setState("SystemInfo.System.productVersion", sysinfo.system.productVersion, true);
+        this.setState("SystemInfo.System.wordSize", sysinfo.system.wordSize, true);
     }
     
     
@@ -649,8 +651,13 @@ class HyperionApi
         this.rxBuffer = "";
         
         this.socket = new net.Socket();
+        this.socket.on("connect", this.OnConnectClbk.bind(this));
         this.socket.on("data", this.OnDataClbk.bind(this));
         this.socket.on("close", this.OnCloseClbk.bind(this));
+        this.socket.on("end", this.OnCloseClbk.bind(this));
+        this.socket.on("error", this.OnCloseClbk.bind(this));
+        
+        
         this.connected = false;
         
         this.debugCmdSent = 0;
@@ -661,7 +668,7 @@ class HyperionApi
     }
     
     Connect() {
-        this.socket.connect(this.port, this.ip, () => { this.connected = true});
+        this.socket.connect(this.port, this.ip);
     }
 
     SourceSelection(prio) {
@@ -683,7 +690,7 @@ class HyperionApi
     }
 
     GetPriorities() {
-        return this.serverinfo.info.priorities;
+        return this.serverinfo.priorities;
     }
 
 /***********************************************************/
@@ -794,13 +801,21 @@ class HyperionApi
             this.pendingCtr--;
             this.debugResponsesReceived++;
         }
+        
+        if (this.pendingCtr == 0) {
+            //todo: reset timeouthandler
+        }
             
         this.rxBuffer =  jsonArray[i];
     }
     
     
-    OnCloseClbk(data) {
+    OnCloseClbk() {
         this.connected = false;
+    }
+    
+    OnConnectClbk() {
+        this.connected = true;
     }
     
         
@@ -818,11 +833,16 @@ class HyperionApi
             this.logger("Received: "+responseJson.command);
             switch(responseJson.command) {
                 case "serverinfo": {
-                    this.serverinfo = responseJson;
+                    this.serverinfo = responseJson.info;
                     break;
                 }
                 case "sysinfo": {
-                    this.sysinfo = responseJson;
+                    this.sysinfo = responseJson.info;
+                    break;
+                }
+                case "priorities-update": {
+                    this.serverinfo.priorities = responseJson.data.priorities;
+                    this.serverinfo.priorities_autoselect = responseJson.data.priorities_autoselect;
                     break;
                 }
                 default: {
