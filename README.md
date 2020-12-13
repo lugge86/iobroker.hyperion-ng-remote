@@ -41,18 +41,45 @@ Developing is ongoing, however, main focus is on stability and reliability inste
 
 The following is on the ToDo-List and will be implemented sooner or later. No feature requests are necessary:
 - cleanup of admin tab
-- using of TCP/IP instead of http for accessing the server
+- support of authentication via API token
 - enable/disable components via datapoints
 - advanced effect configuration (change effect-specific parameters)
 - "Live-Configurator" for colors and effects in admin tab
 - support of the duration parameter of colors and effects which allows a couple of nice applications, e.g. notifications
 
-### Constraints
+### Constraints & Limitations
 At the moment, I do not plan to implement full means of configuration capability.
 Basic setup of hyperion.ng will always have to be done via the common means, e.g. editing config file or using the web GUI.
 
+At the moment, no authentication on the server is possible.
+If your hyperion.ng is set up to only allow connections via an API-token based authentication, you cannot use this adapter now.
+However, default for hyperion.ng is to allow connections from internal network without authentication.
+
 Obsolete data points are never deleted at the moment.
 When colors or effects are dropped from configuration, related data points can be deleted by hand. 
+
+
+## Getting started
+Basic usage is fairly simple.
+All you have to do is enter your server (the computer hyperion.ng is running on) data in the admin adapter tab provided in the "Instances" view.
+hyperion-ng-remote is using raw TCP/IP API for accessing the server, the default port used by hyperion.ng is 19444. This is already set up in the admin tab.
+Further configuration is not necessary at the moment.
+
+Upon hitting the "save" button, hyperion-ng-remote should restart and try to connect to server, this can be checked by observing the status indicator in the "Instances" view.
+The indicator should switch to green after a few seconds.
+
+If hyperion-ng-remote is connected, you should see some information about your hyperion.ng server in ioBroker's object tree.
+Also, already-existing priorities should be listet in the object tree.
+They can be switched between by setting the "visible" state to true.
+
+You can no go back to the admin tab and set up your own color and effect configuration.
+hyperion.ng refers to all colors and effects as "priorities".
+You can see and activate your newly created priorities in the object tree.
+
+The admin tab provides the possibility to set up a friendly name for each priority created via hyperion-ng-remote.
+If providing such a name, this name will be shown in the object tree instead of the raw priority number.
+
+
 
 
 ## Developer manual
