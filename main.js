@@ -50,8 +50,8 @@ class HyperionNgRemote extends utils.Adapter {
         this.deleteionRequested = 0;
         this.deleteionConfirmed = 0;
         this.recoveryFinished = false;
-        this.serverInfoTimer = null;
         this.cycleTimer = null;
+        this.statesDeleted = false;
     }
 
 
@@ -93,9 +93,10 @@ class HyperionNgRemote extends utils.Adapter {
                     this.log.info("init => error");                    
                 } else {
                     /* create hyperion api obj and send initial commands to get some information from server */
-                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 45000);
-                    
+                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 45000);                    
                     this.conn.Connect();
+                    
+                    this.DeleteStates();
                     
                     this.currentState = this.states.dummy;
                     this.log.info("init => dummy");
@@ -107,7 +108,7 @@ class HyperionNgRemote extends utils.Adapter {
             
             case this.states.dummy: {
                 
-                if (this.conn.connected == true) {
+                if ( (this.conn.connected == true) || (this.statesDeleted == true) ) {
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
 
@@ -160,7 +161,7 @@ class HyperionNgRemote extends utils.Adapter {
                  */
                 if ( this.configElementsRequested == this.configElementsConfirmed ) {
                     this.serverinfoFinished = false;
-                    this.conn.ServerInfo();
+                    this.conn.Subscribe( true );
                     this.currentState = this.states.checking;
                     this.log.info("configuring => checking");
                     
@@ -183,7 +184,6 @@ class HyperionNgRemote extends utils.Adapter {
                         */
                         this.CreateStates();
                         this.setState("info.connection", true, true);
-                        this.serverInfoTimer = schedule.scheduleJob("*/60 * * * * *", () => {this.conn.ServerInfo();} );
 
                         this.currentState = this.states.running;
                         this.log.info("checking => running");
@@ -206,11 +206,6 @@ class HyperionNgRemote extends utils.Adapter {
                         this.log.info("connection aborted");
                     } else {
                         this.log.info("server configuration has changed");
-                    }
-                    
-                    /* stop asking for serverinfos */
-                    if (this.serverInfoTimer) {
-                        this.serverInfoTimer.cancel();
                     }
                     
                     this.currentState = this.states.recovering;
@@ -352,6 +347,12 @@ class HyperionNgRemote extends utils.Adapter {
                     this.UpdateDatapointsPriority();
                     break;
                 }
+                
+                case "priorities-update": {
+                    this.UpdateDatapointsPriority();
+                    break;
+                }
+                
                 case "sysinfo": {
                     /* remember success for later use */
                     this.sysinfoFinished = true;
@@ -368,13 +369,6 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
                 case "sourceselect": {
-                    /*
-                     * If a SourceSelect was successful during running state,
-                     * we just execute a ServerInfo afterwards.
-                     * This is necessary in order to update all the data points */
-                    if (this.currentState == this.states.running) {                        
-                        setTimeout( () => { this.conn.ServerInfo(); }, 1400);
-                    }
                     break;
                 }
                 case "clear": {
@@ -560,6 +554,13 @@ class HyperionNgRemote extends utils.Adapter {
     ReInit() {
     }
     
+    
+    async DeleteStates() {
+
+        //this.teststates = this.getStatesAsync();
+        //Todo
+        this.statesDeleted = true;
+    }
 
     async CreateStates() {
         
@@ -583,8 +584,7 @@ class HyperionNgRemote extends utils.Adapter {
             await this.setObjectNotExistsAsync(folderName+".visible",        {type: "state",   common: {name: "set priority visible", type: "boolean", role: "state", read: true, write: true} });
             this.subscribeStates(folderName+".visible");            
         }
-        this.UpdateDatapointsPriority();
-        
+        this.UpdateDatapointsPriority();        
         
         
         var sysinfo = this.conn.GetSysInfo();
@@ -684,6 +684,21 @@ class HyperionApi
         var requestJson = {
             command: "serverinfo",
             //subscribe:["priorities-update"],
+            tan: 1
+        };
+        this.SendRequest(requestJson);
+    }
+    
+    Subscribe(priorities=false) {
+        var subscribes = [];
+        
+        if (priorities==true) {
+            subscribes.push("priorities-update");
+        }
+        
+        var requestJson = {
+            command: "serverinfo",
+            subscribe:subscribes,
             tan: 1
         };
         this.SendRequest(requestJson);
