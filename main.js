@@ -4,12 +4,9 @@
  * Created with @iobroker/create-adapter v1.26.3
  */
 
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
 const utils = require("@iobroker/adapter-core");
 const schedule = require('node-schedule');
 const net = require('net');
-
 
 
 class HyperionNgRemote extends utils.Adapter {
@@ -20,13 +17,15 @@ class HyperionNgRemote extends utils.Adapter {
     states = {
         init: 1,
         connecting: 2,
-        cleaning: 3,
-        configuring: 4,
-        running: 5,
-        error: 6,
-        recovering: 7,
-        waiting: 8,
-        dummy: 9
+        requesting: 3,
+        cleaning: 4,
+        configuring: 5,
+        checking: 6,
+        running: 7,
+        error: 8,
+        recovering: 9,
+        waiting: 10
+        
     };
 
 
@@ -37,18 +36,18 @@ class HyperionNgRemote extends utils.Adapter {
         });
         this.on("ready", this.AdapterInit.bind(this));
         this.on("stateChange", this.StateChangeCallback.bind(this));
-         this.on("message", this.MessageCallback.bind(this));
+        this.on("message", this.MessageCallback.bind(this));
         this.on("unload", this.AdapterShutdown.bind(this));
 
-        this.currentState = this.states.init;
-        
+        /* initialize flags */
+        this.currentState = this.states.init;        
         this.responseError = false;
         this.sysinfoFinished = false;
         this.serverinfoFinished = false;
         this.configElementsRequested = 0;
         this.configElementsConfirmed = 0;
-        this.deleteionRequested = 0;
-        this.deleteionConfirmed = 0;
+        this.deletionRequested = 0;
+        this.deletionConfirmed = 0;
         this.recoveryFinished = false;
         this.cycleTimer = null;
         this.statesDeleted = false;
@@ -85,94 +84,103 @@ class HyperionNgRemote extends utils.Adapter {
         /* actions depend on current state of the adapter */
         switch (this.currentState) {
 
+            /* initial state, only entered once at startup */
             case this.states.init: {
+                
                 if (this.ConfigSanityCheck(this.config) == false) {
-                    /* error with config, no connection to server possible */
-                    this.currentState = this.states.error;
-                    this.log.info("config error; please check your adapter configuration");
-                    this.log.info("init => error");                    
+                    /* error with config, no connection to server possible, go to error state and do nothing */
+                    this.log.error("config error; please check your adapter configuration");
+                    
+                    this.currentState = this.states.error;                    
+                    this.log.debug("init => error");
                 } else {
-                    /* create hyperion api obj and send initial commands to get some information from server */
-                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), this.log.info, 45000);                    
+                    /* create hyperion api obj and connect to server */
+                    this.conn = new HyperionApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), 45000);                    
                     this.conn.Connect();
                     
+                    /* also, delete all existing states to get adapter in a proper state */
                     this.DeleteStates();
                     
-                    this.currentState = this.states.dummy;
-                    this.log.info("init => dummy");
+                    this.currentState = this.states.connecting;
+                    this.log.debug("init => connecting");
                 }
 
                 break;
             }
             
             
-            case this.states.dummy: {
+            case this.states.connecting: {
                 
-                if ( (this.conn.connected == true) || (this.statesDeleted == true) ) {
+                /* check if pending actions (server connection and deleting of old states) have finished before proceeding */
+                if ( (this.conn.connected == true) && (this.statesDeleted == true) ) {
+                    /* get some information from server */
                     this.conn.ServerInfo();
                     this.conn.SysInfo();
 
-                    this.currentState = this.states.connecting;
-                    this.log.info("dummy => connecting");
+                    this.currentState = this.states.requesting;
+                    this.log.debug("connecting => requesting");
                 }
                 
                 break;
             }
 
-            case this.states.connecting: {
-                /*
-                 * In this state we just wait till we are "connected" to hyperion,
-                 * this is when the serverinfo and sysinfo commands have returned.
-                 */
+            case this.states.requesting: {
+                
+                /* check of both requested commands have finished */
                 if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
-                    /* start cleaning the server from old configuration data */
+                    /* delete all existing priorities from server to get server to a proper state */
                     this.DeletePriorities();
 
                     this.currentState = this.states.cleaning;
-                    this.log.info("connecting => cleaning");
-                    
+                    this.log.debug("requesting => cleaning");
+
+                /* error with connection, recover */
                 } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
-                    this.log.info("connecting => recovering");
+                    this.log.debug("requesting => recovering");
                 }
                 break;
             }
 
             case this.states.cleaning: {
 
-                if( this.deleteionRequested == this.deleteionConfirmed ) {
-                    /* all old config is deleted, now write our new configuration to hyperion */
+                /* check if all requested delete jobs have finished before proceeding */
+                if( this.deletionRequested == this.deletionConfirmed ) {
+                    /* now write our new config to server */
                     this.WriteConfig();
 
                     this.currentState = this.states.configuring;
-                    this.log.info("cleaning => configuring");
-                    
+                    this.log.debug("cleaning => configuring");
+
+                /* error with connection, recover */
                 } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
-                    this.log.info("cleaning => recovering");
+                    this.log.debug("cleaning => recovering");
                 }
                 break;
             }
 
             case this.states.configuring: {
-                /*
-                 * Here we wait till all configuration jobs have been
-                 * confirmed by hyperion server.
-                 */
+                
+                /* check if all requested configure jobs have finished before proceeding */
                 if ( this.configElementsRequested == this.configElementsConfirmed ) {
+                    
+                    //Todo:
                     this.serverinfoFinished = false;
                     this.conn.Subscribe( true );
                     this.currentState = this.states.checking;
-                    this.log.info("configuring => checking");
-                    
+                    this.log.debug("configuring => checking");
+                
+                /* error with connection, recover */
                 } else if ( (this.responseError == true) || (this.conn.connected == false) ){
                     this.currentState = this.states.recovering;
-                    this.log.info("configuring => recovering");
+                    this.log.debug("configuring => recovering");
                 }
                 break;
             }
             
             case this.states.checking: {
+                //Todo:
                 if (this.serverinfoFinished == true) {
                     
                     if (this.ServerConfigChanged() == false) {                        
@@ -186,10 +194,10 @@ class HyperionNgRemote extends utils.Adapter {
                         this.setState("info.connection", true, true);
 
                         this.currentState = this.states.running;
-                        this.log.info("checking => running");
+                        this.log.debug("checking => running");
                     } else {
                         this.currentState = this.states.recovering;
-                        this.log.info("checking => recovering");
+                        this.log.debug("checking => recovering");
                     }
                     break;
                     
@@ -201,21 +209,20 @@ class HyperionNgRemote extends utils.Adapter {
                 if ( (this.responseError == true) || (this.ServerConfigChanged() == true) || (this.conn.connected == false) ) {
                     
                     if (this.responseError == true) {
-                        this.log.info("response error occured");
+                        this.log.error("error in server response");
                     } else if (this.conn.connected == false) {
-                        this.log.info("connection aborted");
+                        this.log.error("connection closed by server");
                     } else {
-                        this.log.info("server configuration has changed");
+                        this.log.error("server configuration has changed");
                     }
                     
                     this.currentState = this.states.recovering;
-                    this.log.info("running => recovering");
+                    this.log.debug("running => recovering");
                 }
                 break;
             }
             
-            case this.states.recovering: {
-                
+            case this.states.recovering: {                
                 /* reset all flags */
                 this.setState("info.connection", false, true);
                 this.responseError = false;
@@ -223,19 +230,19 @@ class HyperionNgRemote extends utils.Adapter {
                 this.serverinfoFinished = false;
                 this.configElementsRequested = 0;
                 this.configElementsConfirmed = 0;
-                this.deleteionRequested = 0;
-                this.deleteionConfirmed = 0;
+                this.deletionRequested = 0;
+                this.deletionConfirmed = 0;
                 this.recoveryFinished = false;
                 this.serverInfoTimer = null;
                 
                 setTimeout( () => {
                     this.recoveryFinished  = true;
                 }, 70000);
-                this.log.info("trying to reconnect in 70s");
+                this.log.error("trying to reconnect in 70s");
                 
                 
                 this.currentState = this.states.waiting;
-                this.log.info("recovering => waiting");
+                this.log.debug("recovering => waiting");
                 break;
             }
 
@@ -243,8 +250,8 @@ class HyperionNgRemote extends utils.Adapter {
                 
                 if (this.recoveryFinished == true) {                    
                     this.conn.Connect();
-                    this.currentState = this.states.dummy;                    
-                    this.log.info("waiting => dummy");
+                    this.currentState = this.states.connecting;                    
+                    this.log.debug("waiting => connecting");
                 }
                 break;
             }
@@ -323,8 +330,8 @@ class HyperionNgRemote extends utils.Adapter {
                 }
 
             } else {
-                this.log.info(`state ${id} deleted`);
-                //todo: throw error
+                /* seems that the state was deleted */
+                this.log.info(`state ${id} deleted`);                
             }
         
     }
@@ -337,7 +344,7 @@ class HyperionNgRemote extends utils.Adapter {
             this.log.info("error in response for command: " + command);
             this.log.info(error);
         } else {
-            this.log.debug("request executed properly: " + command);
+            this.log.debug("got server response: " + command);
             switch(command) {
                 case "serverinfo": {
                     /* remember success for later use */
@@ -372,7 +379,7 @@ class HyperionNgRemote extends utils.Adapter {
                     break;
                 }
                 case "clear": {
-                    this.deleteionConfirmed++;
+                    this.deletionConfirmed++;
                     break;
                 }
                 default: {
@@ -406,7 +413,6 @@ class HyperionNgRemote extends utils.Adapter {
         
         this.setState("trigger", activePriority, true);
         this.setState("triggerByName", this.PrioToName(activePriority), true);
-        this.log.info("active: "+activePriority);
     }
     
     
@@ -443,9 +449,7 @@ class HyperionNgRemote extends utils.Adapter {
         
         if (priosInServer != priosConfigured) {
             ret = true;
-            this.log.debug("Priorities in server config: " + priosInServer);
-            this.log.debug("Priorities in adapter config: " + priosConfigured);
-        }        
+        }
         
         return ret;        
     }
@@ -534,18 +538,19 @@ class HyperionNgRemote extends utils.Adapter {
     
     
     IdWithoutPath(id) {
+        /* this will return only the last part of the state id */
         return id.split(".").pop();
     }
 
 
     DeletePriorities() {
         var configuredPrios = this.conn.GetPriorities()
-        this.deleteionConfirmed = 0;
+        this.deletionConfirmed = 0;
         for (var prio of configuredPrios) {
             if ( prio.origin.includes(this.config.appname) ) {
                 /* this was set by us in an previous run, thus, get rid of it */
                 this.conn.Clear(prio.priority);
-                this.deleteionRequested++;
+                this.deletionRequested++;
             }
         }
     }
@@ -641,10 +646,9 @@ class HyperionApi
     sysinfo = null;
     serverinfo = null;
 
-    constructor(ip, port, origin, notifyClbk, logger, timeout) {
+    constructor(ip, port, origin, notifyClbk, timeout) {
         this.origin = origin;
         this.callback = notifyClbk;
-        this.logger = logger;
         this.ip = ip;
         this.port = port;
         this.timeout = timeout;
@@ -844,8 +848,6 @@ class HyperionApi
         } else {
             /* request was executed properly by hyperion */
             /* now, depending on the received message, further actions are necessary */
-            
-            this.logger("Received: "+responseJson.command);
             switch(responseJson.command) {
                 case "serverinfo": {
                     this.serverinfo = responseJson.info;
@@ -877,8 +879,6 @@ class HyperionApi
         
         /* first, create object containing all the needed options for our request */
         var requestString = (JSON.stringify(requestJson) + "\n");
-
-        this.logger("sending request: " + requestJson.command);
         this.socket.write(requestString);
         
         this.pendingCtr++;
