@@ -6,16 +6,14 @@
 
 const utils = require("@iobroker/adapter-core");
 const schedule = require('node-schedule');
-const net = require('net');
 
+/* for communication with hyperion server */
 const HngApi = require('./HngApi');
 
 
 class HyperionNgRemote extends utils.Adapter {
 
-    cycleTimer = null;
-    currentState = null;
-
+    /* possible states of the internal state machine */
     states = {
         init: 1,
         connecting: 2,
@@ -26,8 +24,7 @@ class HyperionNgRemote extends utils.Adapter {
         running: 7,
         error: 8,
         recovering: 9,
-        waiting: 10
-        
+        waiting: 10        
     };
 
 
@@ -36,6 +33,8 @@ class HyperionNgRemote extends utils.Adapter {
             ...options,
             name: "hyperion-ng-remote",
         });
+        
+        /* setting up callbacks */
         this.on("ready", this.AdapterInit.bind(this));
         this.on("stateChange", this.StateChangeCallback.bind(this));
         this.on("message", this.MessageCallback.bind(this));
@@ -78,6 +77,7 @@ class HyperionNgRemote extends utils.Adapter {
 
     
     MainFunction() {
+        /* processing the state machine is our only cyclic task */
         this.ProcessStateMachine();
     }
     
@@ -89,16 +89,18 @@ class HyperionNgRemote extends utils.Adapter {
             /* initial state, only entered once at startup */
             case this.states.init: {
                 
+                /* is the user config invalid* */
                 if (this.ConfigSanityCheck(this.config) == false) {
-                    /* error with config, no connection to server possible, go to error state and do nothing */
+                    /* with invalid config, we cannot do anything, go to error state */
                     this.log.error("config error; please check your adapter configuration");
                     
                     this.currentState = this.states.error;                    
                     this.log.debug("init => error");
+                    
                 } else {
                     /* create hyperion api obj and connect to server */
                     this.conn = new HngApi.HngApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), 45000);                    
-                    this.conn.Connect();
+                    this.serverCon.Connect();
                     
                     /* also, delete all existing states to get adapter in a proper state */
                     this.DeleteStates();
@@ -110,25 +112,29 @@ class HyperionNgRemote extends utils.Adapter {
                 break;
             }
             
-            
+            /* wait till actions from previous state have finished */
             case this.states.connecting: {
                 
-                /* check if pending actions (server connection and deleting of old states) have finished before proceeding */
-                if ( (this.conn.connected == true) && (this.statesDeleted == true) ) {
+                /* is server connection established AND old states are deleted* */
+                if ( (this.serverCon.connected == true) && (this.statesDeleted == true) ) {
                     /* get some information from server */
-                    this.conn.ServerInfo();
-                    this.conn.SysInfo();
+                    this.serverCon.ServerInfo();
+                    this.serverCon.SysInfo();
 
                     this.currentState = this.states.requesting;
                     this.log.debug("connecting => requesting");
+                } else {
+                    /* wait */
+                    //Todo: timeout
                 }
                 
                 break;
             }
 
+            /* wait till actions from previous state have finished */
             case this.states.requesting: {
                 
-                /* check of both requested commands have finished */
+                /* have all commands finished? */
                 if ( (this.sysinfoFinished == true) && (this.serverinfoFinished == true) ) {
                     /* delete all existing priorities from server to get server to a proper state */
                     this.DeletePriorities();
@@ -136,17 +142,22 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.cleaning;
                     this.log.debug("requesting => cleaning");
 
-                /* error with connection, recover */
-                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
+                /* is there an issue with server conncetion? */
+                } else if ( (this.responseError == true) || (this.serverCon.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.debug("requesting => recovering");
+                
+                } else {
+                    /* wait */
                 }
+                
                 break;
             }
 
+            /* wait till actions from previous state have finished */
             case this.states.cleaning: {
 
-                /* check if all requested delete jobs have finished before proceeding */
+                /* have all commands finished? */
                 if( this.deletionRequested == this.deletionConfirmed ) {
                     /* now write our new config to server */
                     this.WriteConfig();
@@ -154,38 +165,48 @@ class HyperionNgRemote extends utils.Adapter {
                     this.currentState = this.states.configuring;
                     this.log.debug("cleaning => configuring");
 
-                /* error with connection, recover */
-                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
+                /* is there an issue with server conncetion? */
+                } else if ( (this.responseError == true) || (this.serverCon.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.debug("cleaning => recovering");
+                
+                } else {
+                    /* wait */
                 }
                 break;
             }
 
+            /* wait till actions from previous state have finished */
             case this.states.configuring: {
                 
-                /* check if all requested configure jobs have finished before proceeding */
+                /* have all commands finished? */
                 if ( this.configElementsRequested == this.configElementsConfirmed ) {
                     
-                    //Todo:
+                    /* now set a subscription, this will also trigger a new server info command */
                     this.serverinfoFinished = false;
-                    this.conn.Subscribe( true );
+                    this.serverCon.Subscribe( true );
+                    
                     this.currentState = this.states.checking;
                     this.log.debug("configuring => checking");
                 
-                /* error with connection, recover */
-                } else if ( (this.responseError == true) || (this.conn.connected == false) ){
+                /* is there an issue with server conncetion? */
+                } else if ( (this.responseError == true) || (this.serverCon.connected == false) ){
                     this.currentState = this.states.recovering;
                     this.log.debug("configuring => recovering");
+                
+                } else {
+                    /* wait */
                 }
                 break;
             }
             
+            /* wait till actions from previous state have finished */
             case this.states.checking: {
-                //Todo:
+                
+                /* have all commands finished? */
                 if (this.serverinfoFinished == true) {
                     
-                    if (this.ServerConfigChanged() == false) {                        
+                    if (this.IsServerConfigChanged() == false) {                        
                         /*
                         * Now that all configuration went well, we can set up a few things:
                         * - create all the data points
@@ -197,22 +218,33 @@ class HyperionNgRemote extends utils.Adapter {
 
                         this.currentState = this.states.running;
                         this.log.debug("checking => running");
+                    
+                    /* config not as expected */
                     } else {
                         this.currentState = this.states.recovering;
                         this.log.debug("checking => recovering");
                     }
-                    break;
-                    
+                
+                /* is there an issue with server conncetion? */
+                } else if ( (this.responseError == true) || (this.serverCon.connected == false) ){
+                    this.currentState = this.states.recovering;
+                    this.log.debug("configuring => recovering");
+                
+                } else {
+                    /* wait */
                 }
+                break;
             }
 
+            /* main state, stay here */
             case this.states.running: {
                 
-                if ( (this.responseError == true) || (this.ServerConfigChanged() == true) || (this.conn.connected == false) ) {
+                /* is there an issue with server conncetion? */
+                if ( (this.responseError == true) || (this.IsServerConfigChanged() == true) || (this.serverCon.connected == false) ) {
                     
                     if (this.responseError == true) {
                         this.log.error("error in server response");
-                    } else if (this.conn.connected == false) {
+                    } else if (this.serverCon.connected == false) {
                         this.log.error("connection closed by server");
                     } else {
                         this.log.error("server configuration has changed");
@@ -220,10 +252,14 @@ class HyperionNgRemote extends utils.Adapter {
                     
                     this.currentState = this.states.recovering;
                     this.log.debug("running => recovering");
+                
+                } else {
+                    /* stay here */
                 }
                 break;
             }
             
+            /* entered after errors, recover to a proper state */
             case this.states.recovering: {                
                 /* reset all flags */
                 this.setState("info.connection", false, true);
@@ -237,6 +273,7 @@ class HyperionNgRemote extends utils.Adapter {
                 this.recoveryFinished = false;
                 this.serverInfoTimer = null;
                 
+                /* set a timer which delays our re-connect attempt */
                 setTimeout( () => {
                     this.recoveryFinished  = true;
                 }, 70000);
@@ -248,12 +285,18 @@ class HyperionNgRemote extends utils.Adapter {
                 break;
             }
 
+            /* wait before attempting new connection */
             case this.states.waiting: {
                 
+                /* timer finished? */
                 if (this.recoveryFinished == true) {                    
-                    this.conn.Connect();
+                    this.serverCon.Connect();
+                    
                     this.currentState = this.states.connecting;                    
                     this.log.debug("waiting => connecting");
+                
+                } else {
+                    /* wait */
                 }
                 break;
             }
@@ -266,90 +309,99 @@ class HyperionNgRemote extends utils.Adapter {
             default: {
                 break;
             }
-
-            //Todo: ???
-            this.ProcessStateMachine();
         }
     }
     
+    
+    /* function is called when a sendTo() message is received */
     MessageCallback(obj) {
-        if (typeof obj === "object") {
-
-            /* actions depend on command */
+        
+        /* actions depend on command */
+        switch (obj.command === "GetEffectList) {
             
-            
-            
-            
-            if (obj.command === "GetEffectList") {
-                /* share our effect list */
+            case "GetEffectList": {
+                /* share our effect list with sender */
                 if (obj.callback) {
-                    this.sendTo(obj.from, obj.command, this.conn.GetEffectList(), obj.callback);
+                    this.sendTo(obj.from, obj.command, this.serverCon.GetEffectList(), obj.callback);
                 }
-            } else if (obj.command === "ConfigSanityCheck") {
-                /* make a sanity check on the given config */
+                break;
+            }
+            case "ConfigSanityCheck": {
+                /* perform a sanity check on the given config */
                 if (obj.callback) {
                     this.sendTo(obj.from, obj.command, this.ConfigSanityCheck(obj.message), obj.callback);
                 }
+                break;
             }
         }
     }
 
     
+    /* function is called when a subscribed state changes */
     async StateChangeCallback(id, state) {
             
-            if (state) {
+        if (state) {                
+            /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
+            if ( (this.currentState == this.states.running) && (state.ack == false) ) {
                 
-                /* we do only stuff when the stateChange comes from user; this can be checked with the ack flag */
-                if ( (this.currentState == this.states.running) && (state.ack == false) ) {
-                    switch( this.IdWithoutPath(id) ){
-                        case "trigger": {
-                            /* set new priority according to user's wish */
-                            this.conn.SourceSelection(state.val);
-                            break;
+                /* actions depend on which state has changed */
+                switch( this.IdWithoutPath(id) ){
+                    
+                    case "trigger": {
+                        /* set new priority according to user's wish */
+                        this.serverCon.SourceSelection(state.val);
+                        break;
+                    }
+                    
+                    case "triggerByName": {
+                        /* before we can set the new priority, we have to map the name to a prio number */
+                        this.serverCon.SourceSelection( this.NameToPrio(state.val) );
+                        break;
+                    }
+                    
+                    case "visible": {
+                        /* first we have to get the priority of which the visibility shall be changed */
+                        var prioState = await this.getStateAsync( this.PathFromId(id) + ".priority" );
+                        var prio = prioState.val;
+                        if (state.val == true) {
+                            /* user wants to set priority visible, thus, just execute a SourceSelection */
+                            this.serverCon.SourceSelection(prio);
+                        } else {
+                            /* setting to false is not supported at the moment, because, what should happen? */
                         }
-                        case "triggerByName": {
-                            /* before we can set the new priority, we have to map the name to a prio number */
-                            this.conn.SourceSelection( this.NameToPrio(state.val) );
-                            break;
-                        }
-                        case "visible": {
-                            /* first we have to get the priority of which the visibility shall be changed */
-                            var prioState = await this.getStateAsync( this.PathFromId(id) + ".priority" );
-                            var prio = prioState.val;
-                            if (state.val == true) {
-                                /* user wants to set priority visible, thus, just execute a SourceSelection */
-                                this.conn.SourceSelection(prio);
-                            } else {
-                                /* setting to false is not supported at the moment, this would mean no prio is active */
-                            }
-                            
-                            break;
-                        }
-                        default: {
-                            break;
-                        }
+                        
+                        break;
+                    }
+                    
+                    default: {
+                        break;
                     }
                 }
-
-            } else {
-                /* seems that the state was deleted */
-                this.log.info(`state ${id} deleted`);                
             }
-        
+
+        } else {
+            /* seems that the state was deleted */
+            this.log.info(`state ${id} deleted`);                
+        }
     }
 
 
-    
+    /* function is called by Hyperion API when a command is executed */
     NotifyCallback(command, error) {
+        
+        /* where there any issues? */
         if (error) {
             this.responseError = true;
             this.log.info("error in response for command: " + command);
             this.log.info(error);
+
         } else {
             this.log.debug("got server response: " + command);
+            
+            /* actions depend on command */
             switch(command) {
                 case "serverinfo": {
-                    /* remember success for later use */
+                    /* set a flag to indicate a serverInfo has finished */
                     this.serverinfoFinished = true;
                     
                     /* everytime we receive a ServerInfo, we can update all our data points */
@@ -363,44 +415,55 @@ class HyperionNgRemote extends utils.Adapter {
                 }
                 
                 case "sysinfo": {
-                    /* remember success for later use */
+                    /* set a flag to indicate a sysInfo has finished */
                     this.sysinfoFinished = true;
                     break;
                 }
+                
                 case "color": {
                     /* we have to count the responses in order to know when configuration is complete */
                     this.configElementsConfirmed++;
                     break;
                 }
+                
                 case "effect": {
                     /* we have to count the responses in order to know when configuration is complete */
                     this.configElementsConfirmed++;
                     break;
                 }
+                
                 case "sourceselect": {
                     break;
                 }
+                
                 case "clear": {
+                    /* we have to count the responses in order to know when configuration is complete */
                     this.deletionConfirmed++;
                     break;
                 }
+                
                 default: {
                     break;
                 }
             }
         }
 
+        /* we can also trigger the state machine here, no need to wait till next scheduler tick */
         this.ProcessStateMachine();
     }
     
     
+    /* updates all data points related to priorities */
     UpdateDatapointsPriority() {
+
         var activePriority = null;
-        var availablePriorities = this.conn.GetPriorities();
         
-        for (var priority of availablePriorities) {
+        /* Note: ack is always set because we don't want to trigger actions but to give the user feedback */
+        
+        for (var priority of this.serverCon.GetPriorities()) {
             var folderName = "Priorities."+this.PrioToName(priority.priority);
             
+            /* update all data points related to this priority */
             this.setState(folderName+".componentId", priority.componentId, true);
             this.setState(folderName+".origin", priority.origin, true);
             this.setState(folderName+".priority", priority.priority, true);
@@ -408,18 +471,21 @@ class HyperionNgRemote extends utils.Adapter {
             this.setState(folderName+".active", priority.active, true);
             this.setState(folderName+".visible", priority.visible, true);
             
+            /* there is only one visible priority at a time, and we need to remember which one */
             if (priority.visible == true) {
                 activePriority = priority.priority;
             }
         }
         
+        /* also, the generic trigger data points needs to be updated */
         this.setState("trigger", activePriority, true);
         this.setState("triggerByName", this.PrioToName(activePriority), true);
     }
     
     
+    /* updates all data points related to sys info command */
     UpdateDatapointsSysinfo() {        
-        var sysinfo = this.conn.GetSysInfo();
+        var sysinfo = this.serverCon.GetSysInfo();
         
         this.setState("SystemInfo.Hyperion.build", sysinfo.hyperion.build, true);
         this.setState("SystemInfo.Hyperion.gitremote", sysinfo.hyperion.gitremote, true);
@@ -438,17 +504,19 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
-    ServerConfigChanged() {        
+    /* checks if the prioritys configured by this adapter have changed (due to server reboot or some other hyperion client) */
+    IsServerConfigChanged() {        
         var ret = false;        
         var priosConfigured = this.config.colors.length + this.config.effects.length;
         var priosInServer = 0;
         
-        for (var prio of this.conn.GetPriorities() ) {
+        for (var prio of this.serverCon.GetPriorities() ) {
             if (prio.origin.includes(this.config.appname)) {
                 priosInServer++;                
             }
         }
         
+        /* the priorities on server side are not matching our expectations, config has changed */
         if (priosInServer != priosConfigured) {
             ret = true;
         }
@@ -457,6 +525,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
+    /* performs a few checks on the user config */
     ConfigSanityCheck(config) {
         var configSane = true;
 
@@ -465,6 +534,7 @@ class HyperionNgRemote extends utils.Adapter {
             configSane = false;
         }
         
+        /* this will check if all configured priorities are unique or if there are duplicates */
         {
             var prioArray = new Array();
             for (var color of config.colors) {
@@ -482,6 +552,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
+    /* function matches an priority friendly name to its number */
     NameToPrio(name) {
         var prio = null;
         
@@ -504,6 +575,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
+    /* function matches an priority number to its friendly name from user configuration */
     PrioToName(prio) {        
         /* Todo: a map would be better here */
         var name = null;        
@@ -528,6 +600,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
+    /* this returns only the path part of a state ID */
     PathFromId(id) {
         var tmpArr = id.split(".");
         var ret = "";
@@ -539,36 +612,42 @@ class HyperionNgRemote extends utils.Adapter {
     }
     
     
+    /* this returns only the last part of a state ID */
     IdWithoutPath(id) {
         /* this will return only the last part of the state id */
         return id.split(".").pop();
     }
 
 
+    /* function clears every priority from server which was set up by this adapter */
     DeletePriorities() {
-        var configuredPrios = this.conn.GetPriorities()
+        var configuredPrios = this.serverCon.GetPriorities()
         this.deletionConfirmed = 0;
         for (var prio of configuredPrios) {
+            /* was this priority set up by us? */
             if ( prio.origin.includes(this.config.appname) ) {
-                /* this was set by us in an previous run, thus, get rid of it */
-                this.conn.Clear(prio.priority);
+                /* ...then delete it */
+                this.serverCon.Clear(prio.priority);
                 this.deletionRequested++;
             }
         }
     }
     
     
+    /* Todo: for reinitialization tasks */
     ReInit() {
     }
     
     
+    /* deletes all of our old states from object tree */
     async DeleteStates() {
 
-        //this.teststates = this.getStatesAsync();
-        //Todo
+        //Todo: feature is not implemented at the moment */
         this.statesDeleted = true;
     }
 
+    
+    /* functions creates data points for this adapter */
     async CreateStates() {
         
         /* data point for directly setting the active priority */
@@ -578,7 +657,7 @@ class HyperionNgRemote extends utils.Adapter {
         this.subscribeStates("triggerByName");
 
         /* create data points for each configured prio, register only the active-trigger */
-        var availablePriorities = this.conn.GetPriorities();
+        var availablePriorities = this.serverCon.GetPriorities();
         for (var priority of availablePriorities) {
             
             var folderName = "Priorities."+this.PrioToName(priority.priority);
@@ -594,7 +673,7 @@ class HyperionNgRemote extends utils.Adapter {
         this.UpdateDatapointsPriority();        
         
         
-        var sysinfo = this.conn.GetSysInfo();
+        var sysinfo = this.serverCon.GetSysInfo();
         await this.setObjectNotExistsAsync("SystemInfo.Hyperion.build",     {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
         await this.setObjectNotExistsAsync("SystemInfo.Hyperion.gitremote", {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
         await this.setObjectNotExistsAsync("SystemInfo.Hyperion.time",      {type: "state",   common: {name: "componentId of this priority", type: "string", role: "state", read: true, write: false} });
@@ -612,6 +691,7 @@ class HyperionNgRemote extends utils.Adapter {
     }
 
 
+    /* function sets up user colors and effects in hyperion server */
     WriteConfig() {
         /*
          * We need a little helper function to convert the color string (e.g. #12AB3F)
@@ -628,13 +708,13 @@ class HyperionNgRemote extends utils.Adapter {
 
         /* take every color from user configuration and send it to hyperion server */
         for(var color of this.config.colors) {
-            this.conn.Color( hexToRgb(color.color), Number(color.prio), 0);
+            this.serverCon.Color( hexToRgb(color.color), Number(color.prio), 0);
             this.configElementsRequested++;
         }
 
         /* then do the same again with the effects... */
         for(var effect of this.config.effects) {
-            this.conn.Effect( effect.effect, Number(effect.prio), 0);
+            this.serverCon.Effect( effect.effect, Number(effect.prio), 0);
             this.configElementsRequested++;
         }
     }
