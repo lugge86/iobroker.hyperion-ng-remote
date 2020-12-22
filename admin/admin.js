@@ -45,7 +45,7 @@ function load(settings, onChange) {
     
     
     /* ask the adapter backend which effects are provided by server and add them to the select fields */
-    sendTo(backend, 'GetEffectList', null, effectList => {
+    sendTo(adapter + "." + instance, 'GetEffectList', null, effectList => {
         for (var entry of effectList) {
             Select_AddOption( effectSelect, entry);
         }
@@ -130,7 +130,7 @@ function save(callback) {
     
     
     /* before storing the config object via the callback, ask adapter backend if the config is valid */
-    sendTo(backend, 'ConfigSanityCheck', adapterConfig, isSane => {
+    sendTo(adapter + "." + instance, 'ConfigSanityCheck', adapterConfig, isSane => {
         if (isSane) {
             /* config object is valid and can be stored permanently */
             callback(adapterConfig);

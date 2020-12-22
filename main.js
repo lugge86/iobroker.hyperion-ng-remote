@@ -99,7 +99,7 @@ class HyperionNgRemote extends utils.Adapter {
                     
                 } else {
                     /* create hyperion api obj and connect to server */
-                    this.conn = new HngApi.HngApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), 45000);                    
+                    this.serverCon = new HngApi.HngApi(this.config.serverIp, this.config.serverPort, this.config.appname, this.NotifyCallback.bind(this), 45000);                    
                     this.serverCon.Connect();
                     
                     /* also, delete all existing states to get adapter in a proper state */
@@ -317,7 +317,7 @@ class HyperionNgRemote extends utils.Adapter {
     MessageCallback(obj) {
         
         /* actions depend on command */
-        switch (obj.command === "GetEffectList) {
+        switch (obj.command) {
             
             case "GetEffectList": {
                 /* share our effect list with sender */
