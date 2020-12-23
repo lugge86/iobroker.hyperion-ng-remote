@@ -531,7 +531,11 @@ class HyperionNgRemote extends utils.Adapter {
 
         /* check if port is in allowed range */
         if ( (config.serverPort < 0) || (config.serverPort > 65535) ) {
-            configSane = false;
+            return false;
+        }
+        
+        if ( !(config.colors) || !(config.effects) ) {
+            return false;
         }
         
         /* this will check if all configured priorities are unique or if there are duplicates */
